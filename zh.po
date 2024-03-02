@@ -1,6 +1,0 @@
-msgid "死印"
-msgstr ""
-msgid "痔"
-msgstr ""
-msgid "しるし"
-msgstr ""
