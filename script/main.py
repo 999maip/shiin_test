@@ -1,3 +1,5 @@
+from PIL import Image, ImageDraw
+
 code_table = [
 0xDC, 0xE6, 0x72, 0x8F, 0xF4, 0x1E, 0xC9, 0x87, 0x36, 0xD4, 0x81, 0xF2, 0x92, 0xD3, 0xCE, 0xAF,
 0x52, 0xF6, 0x5C, 0xC4, 0x22, 0xBC, 0x27, 0xFB, 0x97, 0xC2, 0xED, 0xCC, 0xB8, 0x65, 0xB0, 0x79,
@@ -18,7 +20,7 @@ code_table = [
 
 def decompress(data, code_size, size_raw: int):
     a1 = -8
-    result = bytearray(size_raw + 1)
+    result = bytearray(size_raw)
     result_offset = 0
     v10 = code_size
 
@@ -52,7 +54,7 @@ def decompress(data, code_size, size_raw: int):
                 result_offset += 2
             v3 += 1
             v5 += 2
-            # v12 = v3
+            # v11 = v3
             v6 = v3 & 0xF
             if (v3 & 0xF) == 0:
                 v4 = v5
@@ -73,10 +75,8 @@ def dat_to_scripts(data):
         script_size_raw = int.from_bytes(data[offset+8:offset+12], 'little', signed=True)
         script_code_size = int.from_bytes(data[offset+12:offset+16], 'little', signed=True)
 
-        if script_size_raw == 0:
-            continue
-
-        scripts[script_id] = decompress(script_data, script_code_size, script_size_raw)
+        if script_size_raw != 0:
+            scripts[script_id] = decompress(script_data, script_code_size, script_size_raw)
         offset += 8 + script_size_compressed
 
     return scripts
@@ -104,17 +104,87 @@ def script_to_txt(data):
         offset = offset + 8 + size
     return txt
 
+class Glyph:
+    glyph = bytearray()
+    width = 0
+    height = 0
+    offsetx = 0
+    offsety = 0
+
+# @param char_sjis shift-jis encoding of character(2 bytes)
+def exp_to_glyph(data, char_sjis):
+    canvas = bytearray()
+    # 4-byte EXF1
+    if data[:4].decode('ascii') != 'EXF1':
+        print('Invalid font data')
+        return canvas
+    image_height = data[4]
+    image_width = data[5]
+
+    canvas = bytearray(image_width * image_height)
+
+    image_width2 = data[6] # for alphabet glyphs maybe; almost useless, can be ignored
+    height_padding = data[7] # no working? almost useless, can be ignored
+    width_padding = data[8]
+    char_table_size = int.from_bytes(data[10:12], 'little') + 1
+
+    # index table consists of 4-bytes offsets relative to 'glyph_table_offset'
+    index_table_size = char_table_size * 4
+    index_table_offset = 0x10
+    glyph_table_offset = index_table_size + index_table_offset # 0x3f140 for fontdata_fontdata01.exp
+
+    index = int.from_bytes(data[char_sjis * 4 + index_table_offset:char_sjis * 4 + index_table_offset + 4], 'little')
+    glyph_offset = glyph_table_offset + index
+    glyph_size = int.from_bytes(data[glyph_offset:glyph_offset+2], 'little')
+    glyph_width = data[glyph_offset + 2]
+    glyph_height = data[glyph_offset + 3]
+    # glyph_size == glyph_width * glyph_height
+    glyph_bearingx = data[glyph_offset + 4] # bearing or just offset?
+    glyph_bearingy = data[glyph_offset + 5] # bearing or just offset?
+
+    glyph = data[glyph_offset+6:glyph_offset+6+glyph_size]
+
+    glyph_obj = Glyph()
+    glyph_obj.glyph = glyph
+    glyph_obj.width = glyph_width
+    glyph_obj.height = glyph_height
+    glyph_obj.offsetx = glyph_bearingx
+    glyph_obj.offsety = glyph_bearingy
+
+    return glyph_obj
+
+# used for test only
+def glyph_to_img(glyph_obj: Glyph):
+    # a 60*60 canvas
+    print(glyph_obj.height, glyph_obj.width)
+    img = Image.new("RGB", (60, 60))
+    for i in range(glyph_obj.height):
+        for j in range(glyph_obj.width):
+            gray_scale = glyph_obj.glyph[i*glyph_obj.width + j]
+            img.putpixel((j+glyph_obj.offsetx, i+glyph_obj.offsety), (gray_scale, gray_scale, gray_scale))
+    
+    return img
+    
+
 
 def main():
+    # script processing sample
     fin = open('event_script.dat', 'rb')
     data = fin.read()
     fin.close()
-
     scripts = dat_to_scripts(data)
     for script_id, data in scripts.items():
-        fout = open('output/%d.dat.txt' % script_id, 'w', encoding='utf8')
+        fout = open('output_script/%d.dat.txt' % script_id, 'w', encoding='utf8')
         fout.write(script_to_txt(data))
         fout.close()
+
+    # font processing sample
+    fin = open('fontdata_fontdata01.exp', 'rb')
+    data = fin.read()
+    glyph_obj = exp_to_glyph(data, 0x82a6) # ぇ
+    img = glyph_to_img(glyph_obj)
+    img.save('output_font/test_glpyh.png')
+    fin.close()
 
 if __name__ == '__main__':
     main()
