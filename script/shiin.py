@@ -19,6 +19,53 @@ code_table = [
 0x58, 0x9F, 0x84, 0xEC, 0x55, 0xF3, 0x33, 0x09, 0xE2, 0x8C, 0x74, 0x6A, 0xFF, 0x08, 0x30, 0x1D,
 0x78, 0x43, 0x48, 0x4F, 0x34, 0xE1, 0x95, 0xDA, 0xB9, 0x1B, 0x64, 0x8A, 0x01, 0xCB, 0x03, 0x6F]
 
+# data为压缩数据,code_size为压缩后的数据处理次数,size_raw为解压后数据大小
+# optimized version
+def decompress_new(data, code_size, size_raw: int):
+    result = bytearray(size_raw)
+    result_cursor = 0
+    if code_size <= 0:
+        for i in range(size_raw):
+            result[i] = data[i]
+        return result
+    else:
+        flag_cursor = 0
+        data_cursor = 2
+        flag = 0
+        for count in range(code_size):
+            # 从前两个字节中的flag位判断从result里复制数据还是从码表赋值
+            if ((1 << flag) & int.from_bytes(data[flag_cursor:flag_cursor + 2], 'little')) != 0:
+
+                # 如果为1，读取数据second_cursor位置的两个字节，前9位存储偏移量
+                copy_start_cursor = (-2 * (int.from_bytes(data[data_cursor:data_cursor + 2], 'little') >> 7) +
+                                     result_cursor)
+
+                # second_cursor位置后7位存储重复的长度
+                length = int.from_bytes(data[data_cursor:data_cursor + 2], 'little') & 0x7F
+                for _ in range(length):
+                    first_byte = result[copy_start_cursor]
+                    second_byte = result[copy_start_cursor + 1]
+                    copy_start_cursor += 2
+                    result[result_cursor] = first_byte
+                    result[result_cursor + 1] = second_byte
+                    # 更新result_cursor
+                    result_cursor += 2
+            # flag为0，从码表获取数据
+            else:
+                # 读取second_cursor位置的数据作为索引找到码表，换句话说second_cursor位置存储了对应码表的索引
+                result[result_cursor] = code_table[data[data_cursor]]
+                result[result_cursor + 1] = code_table[data[data_cursor + 1]]
+                # 更新result_cursor
+                result_cursor += 2
+            data_cursor += 2
+            # 更新flag
+            flag = (count + 1) & 0xF
+            if flag == 0:
+                # 更新标记指针flag_cursor
+                flag_cursor = data_cursor
+                data_cursor = data_cursor + 2
+    return result
+
 def decompress(data, code_size, size_raw: int):
     a1 = -8
     result = bytearray(size_raw)
@@ -85,6 +132,120 @@ def dat_to_scripts(data):
         offset += 8 + script_size_compressed
 
     return scripts
+
+
+def compress(data):
+    if len(data) <= 2:
+        return data
+    window = 1 << 10
+    lookahead = 1 << 8
+    data_cursor = 0
+    count = 0
+    flag_index = 0
+    flag = 0
+    result = bytearray()
+    while data_cursor < len(data):
+        # flag存储判断信息,每16次添加2个占位字节,并更新该占位字节的索引
+        if count & 0xF == 0:
+            result.append(0)
+            result.append(0)
+            flag_index = len(result) - 2
+            flag = 0
+        # 小于窗口长度,从数据头开始匹配字节串,否则从数据窗口起点开始匹配
+        start_index = 0 if data_cursor <= window else data_cursor - window
+        match_result = match(data[start_index: data_cursor], data[data_cursor: data_cursor + lookahead])
+        # 若匹配字节串为0,没有匹配到,获取索引
+        if match_result[1] <= 0 or match_result[0] <= 0:
+            result.append(code_table.index(data[data_cursor]))
+            result.append(code_table.index(data[data_cursor + 1]))
+            data_cursor += 2
+        # 若匹配到了,直接存储复制信息
+        else:
+            # 计算出偏移量,数据指针绝对位置减去开始复制时的绝对位置
+            offset = (data_cursor - match_result[0] - start_index) << 6
+            # 计算出长度
+            length = match_result[1] >> 1
+            message = offset | length
+            result.append(message & 0xFF)
+            result.append((message >> 8) & 0xFF)
+            # 移动指针到匹配好的位置
+            data_cursor += match_result[1]
+            # 标记位为1
+            flag = (1 << (count & 0xF)) | flag
+        count += 1
+        # 更新flag
+        result[flag_index] = flag & 0xFF
+        result[flag_index + 1] = (flag >> 8) & 0xFF
+    return result
+
+
+def match(window_data, lookahead_data):
+    index = 0
+    max_length = 0
+    window_cursor = 0
+    lookahead_cursor = 0
+    if len(window_data) < 2 or len(lookahead_data) < 2:
+        # 数组第一位为索引，第二为长度
+        return [0, 0]
+    while window_cursor < len(window_data):
+        # print(window_data[0])
+        # 判断当前先行缓存区的字节串是否与滑动窗口的字节串匹配,搜索距离最近的最大子串
+        if window_data[window_cursor: window_cursor + 2] == lookahead_data[lookahead_cursor: lookahead_cursor + 2]:
+            lookahead_cursor += 2
+            if lookahead_cursor >= max_length:
+                max_length = lookahead_cursor
+                index = window_cursor - max_length + 2
+        else:
+            lookahead_cursor = 0
+        window_cursor += 2
+    return [index, max_length]
+
+
+# 获取压缩数据解压时需要的迭代次数code_size
+def get_code_size(data):
+    return (len(data) // 34) * 16 + (len(data) % 34 - 2) // 2
+
+
+# 只映射code_table,不进行压缩,可以保证解压后数据不会出错,但会导致文件变大,备选方案
+def compress_dummy(data):
+    if len(data) <= 2:
+        return data
+    count = 0
+    data_cursor = 0
+    result = bytearray()
+    while data_cursor < len(data):
+        if count & 0xF == 0:
+            result.append(0)
+            result.append(0)
+        result.append(code_table.index(data[data_cursor]))
+        result.append(code_table.index(data[data_cursor + 1]))
+        data_cursor += 2
+        count += 1
+    return result
+
+
+# 打包成dat文件,包含压缩过程,将字典里的数据压缩成可输出的字节串
+# 传入scripts字典,key为script_id,value为txt_to_script的返回值
+def scripts_to_dat(scripts: dict):
+    result = bytearray()
+    for script_id, data in scripts.items():
+        # 压缩
+        compress_data = compress(data)
+        length = len(compress_data)
+        if len(compress_data) % 4 != 0:
+            compress_data.extend([0, 0])
+        # 文件id
+        result.extend(script_id.to_bytes(4, 'little'))
+        # 压缩后文件大小
+        result.extend((length + 8).to_bytes(4, 'little'))
+        # 原数据大小
+        result.extend(len(data).to_bytes(4, 'little'))
+        # 迭代次数
+        result.extend(get_code_size(compress_data).to_bytes(4, 'little'))
+        result.extend(compress_data)
+
+    return result
+
 
 def script_to_txts(prefix, script_id, data):
     offset = 0
