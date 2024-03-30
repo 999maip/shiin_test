@@ -1,4 +1,5 @@
 from PIL import Image, ImageDraw
+import unicodedata
 
 code_table = [
 0xDC, 0xE6, 0x72, 0x8F, 0xF4, 0x1E, 0xC9, 0x87, 0x36, 0xD4, 0x81, 0xF2, 0x92, 0xD3, 0xCE, 0xAF,
@@ -64,14 +65,18 @@ def decompress(data, code_size, size_raw: int):
                 break
     return result
 
+def uid(prefix, script_id, line_id):
+    script_id_base = 0x1000000
+    return prefix + '_' + format(script_id - script_id_base, '05x') + '_' + format(line_id, '08x')
+
 def dat_to_scripts(data):
     offset = 0
     scripts = dict()
     while offset < len(data):
         script_id = int.from_bytes(data[offset:offset+4], 'little')
         script_size_compressed = int.from_bytes(data[offset+4:offset+8], 'little', signed=True)
-        script_size_compressed = (script_size_compressed + 3) & 0xFFFFFFFC # 4-byte alignment
         script_data = data[offset+16:offset+8+script_size_compressed]
+        script_size_compressed = (script_size_compressed + 3) & 0xFFFFFFFC # 4-byte alignment
         script_size_raw = int.from_bytes(data[offset+8:offset+12], 'little', signed=True)
         script_code_size = int.from_bytes(data[offset+12:offset+16], 'little', signed=True)
 
@@ -81,11 +86,11 @@ def dat_to_scripts(data):
 
     return scripts
 
-def script_to_txt(data):
+def script_to_txts(prefix, script_id, data):
     offset = 0
-    txt = ''
+    txts = dict()
     while offset < len(data):
-        id = int.from_bytes(data[offset:offset+4], 'little')
+        line_id = int.from_bytes(data[offset:offset+4], 'little')
         size = int.from_bytes(data[offset+4:offset+8], 'little')
         text_str = '<binary data>'
         if size > 0:
@@ -96,13 +101,23 @@ def script_to_txt(data):
                     idx = idx - 1
 
                 text_str = data[offset+8:idx+1].decode(encoding='sjis')
-                txt += text_str + '\n'
+
+                if len(data[offset+8:idx+1]) == 1:
+                    text_str = '<binary data>'
+                elif any(unicodedata.category(char) == 'Cc' for char in text_str):
+                    text_str = '<binary data>'
+                elif all(ord(char) <= 0xff for char in text_str):
+                    text_str = '<binary data>'
+
             except Exception:
-                txt += text_str + '\n'
-                offset = offset + 8 + size
-                continue
+                pass
+        if text_str != '<binary data>':
+            # extra filter:
+
+            txts[uid(prefix, script_id, line_id)] = text_str
+
         offset = offset + 8 + size
-    return txt
+    return txts
 
 class Glyph:
     glyph = bytearray()
@@ -174,17 +189,17 @@ def main():
     fin.close()
     scripts = dat_to_scripts(data)
     for script_id, data in scripts.items():
-        fout = open('output_script/%d.dat.txt' % script_id, 'w', encoding='utf8')
-        fout.write(script_to_txt(data))
+        fout = open('output_data/%d.dat' % script_id, 'wb')
+        fout.write(data)
         fout.close()
 
     # font processing sample
-    fin = open('fontdata_fontdata01.exp', 'rb')
-    data = fin.read()
-    glyph_obj = exp_to_glyph(data, 0x82a6) # ぇ
-    img = glyph_to_img(glyph_obj)
-    img.save('output_font/test_glpyh.png')
-    fin.close()
+    # fin = open('fontdata_fontdata01.exp', 'rb')
+    # data = fin.read()
+    # glyph_obj = exp_to_glyph(data, 0x82a6) # ぇ
+    # img = glyph_to_img(glyph_obj)
+    # img.save('output_font/test_glpyh.png')
+    # fin.close()
 
 if __name__ == '__main__':
     main()
