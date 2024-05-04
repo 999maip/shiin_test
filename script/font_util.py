@@ -112,7 +112,7 @@ def font_test():
 def gen_char_table():
     table = dict()
 
-    fdefault = open('default_char_table.txt', encoding='utf8')
+    fdefault = open('resource/default_char_table.txt', encoding='utf8')
     for line in fdefault:
         line = line.strip()
         for ch in line:
@@ -128,7 +128,7 @@ def gen_char_table():
 
     fdefault.close()
 
-    fout = open('char_table.txt', 'w', encoding='utf8')
+    fout = open('resource/char_table.txt', 'w', encoding='utf8')
 
     print('%d characters.' % len(table))
 
@@ -137,12 +137,12 @@ def gen_char_table():
 
     fout.close()
 
-def generate_character_mapping():
+def generate_char_mapping():
     cn_char_table = dict()
     mapping = dict()
     jp_char_table = dict()
 
-    ftable = open('char_table.txt', 'r', encoding='utf8')
+    ftable = open('resource/char_table.txt', 'r', encoding='utf8')
     for line in ftable:
         line = line.strip()
         for ch in line:
@@ -191,7 +191,7 @@ def generate_character_mapping():
             break
         cn_char_table[cn_char] = 2
 
-    fmapping = open('character_mapping.txt', 'w', encoding='utf-8')
+    fmapping = open('resource/char_mapping.txt', 'w', encoding='utf-8')
     for chr, mapped in mapping.items():
         fmapping.write(chr)
         fmapping.write(' ')
@@ -202,7 +202,7 @@ def generate_character_mapping():
 def generate_cn_glyphs():
     font = ImageFont.truetype("arshanghaisonggbpro_lt.otf", 40)
     glyph_table = dict()
-    ftable = open('character_mapping.txt', 'r', encoding='utf8')
+    ftable = open('resource/char_mapping.txt', 'r', encoding='utf8')
 
     for line in ftable:
         line = line.strip()
@@ -234,7 +234,7 @@ def generate_cn_glyphs():
 
 def txt_to_mapped_txt(text):
     mapping = dict()
-    ftable = open('character_mapping.txt', 'r', encoding='utf8')
+    ftable = open('resource/char_mapping.txt', 'r', encoding='utf8')
     mapping[' '] = ' '
     mapping['　'] = '　'
     for line in ftable:
