@@ -340,12 +340,12 @@ def script_to_txts(prefix, script_id, data):
     return txts
 
 def gen_cn_dat():
-    csv_file_list = ['chapter1.csv', 'chapter2.csv', 'chapter3.csv',
-                     'chapter4.csv', 'chapter5.csv', 'chapter6.csv',
+    csv_file_list = ['chapter1_cn.csv', 'chapter2_cn.csv', 'chapter3_cn.csv',
+                     'chapter4_cn.csv', 'chapter5_cn.csv', 'chapter6_cn.csv',
                      'chapter1_extra.csv']
     csv_data = []
 
-    input_dir = 'input'
+    input_dir = 'text'
     for csv_file in csv_file_list:
         try:
             fin = open(input_dir + '/' + csv_file, 'r', encoding='utf8')
@@ -368,7 +368,7 @@ def gen_cn_dat():
 
 def main():
     gen_cn_dat()
-    # script processing sample
+    # event script processing sample
     # fin = open('event_script.dat', 'rb')
     # data = fin.read()
     # fin.close()
@@ -389,13 +389,7 @@ def main():
     #     scripts[script_id] = fin.read()
     #     fin.close()
     
-    # fout = open('event_script_cn.dat', 'wb')
-    # print('b4')
-    # fout.write(scripts_to_dat(scripts))
-    # print('after')
-    # fout.close()
-
-    # script processing sample
+    # event_mazeevent script processing sample
     # fin = open('event_mazeevent.dat', 'rb')
     # data = fin.read()
     # fin.close()
@@ -406,7 +400,7 @@ def main():
     #         fout.write(uid + ',' + txt + '\n')
     #     fout.close()
 
-    # script processing sample
+    # table_tablepack script processing sample
     # fin = open('table_tablepack.dat', 'rb')
     # data = fin.read()
     # fin.close()
@@ -418,21 +412,6 @@ def main():
     #     fout.write(data)
     #     fout.close()
 
-    # font processing sample
-    # fin = open('fontdata_fontdata01.exp', 'rb')
-    # data = fin.read()
-    # glyph_obj = exp_to_glyph(data, 0x82a6) # ぇ
-    # img = glyph_to_img(glyph_obj)
-    # img.save('output_font/test_glpyh.png')
-    # fin.close()
-
-    # font file generation sample
-    # fin = open('fontdata_fontdata01.exp', 'rb')
-    # jp_font_data = fin.read()
-    # cn_font_data = font_util.reimport_font_data(jp_font_data)
-    # fout = open('fontdata_fontdata01_cn.exp', 'wb')
-    # fout.write(cn_font_data)
-    # fout.close()
     
 
 if __name__ == '__main__':

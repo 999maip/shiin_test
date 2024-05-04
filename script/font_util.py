@@ -52,7 +52,7 @@ def exp_to_glyph(data, char_sjis):
 
 def reimport_font_data(jp_font_data):
     # test
-    glyph_table = generate_cn_glyphs()
+    glyph_table = gen_cn_glyphs()
     cn_font_data = bytearray()
     cn_font_data.extend(jp_font_data[:0x3f1CA])
     char_table_size = int.from_bytes(jp_font_data[10:12], 'little') + 1
@@ -98,7 +98,7 @@ def font_test():
     draw = ImageDraw.Draw(img)
 
     # use a truetype font
-    font = ImageFont.truetype("arshanghaisonggbpro_lt.otf", 35)
+    font = ImageFont.truetype("resource/arshanghaisonggbpro_lt.otf", 35)
     bitmap = font.getmask('，')
     bitmap_image = Image.frombytes(bitmap.mode, bitmap.size, bytes(bitmap))
 
@@ -120,7 +120,7 @@ def gen_char_table():
 
     fdefault.close()
 
-    fscript = open('translation_files/chapter4.csv', encoding='utf8')
+    fscript = open('txt/chapter4_cn.csv', encoding='utf8')
     for line in fscript:
         line = line.strip()
         for ch in line:
@@ -137,7 +137,7 @@ def gen_char_table():
 
     fout.close()
 
-def generate_char_mapping():
+def gen_char_mapping():
     cn_char_table = dict()
     mapping = dict()
     jp_char_table = dict()
@@ -199,8 +199,8 @@ def generate_char_mapping():
         fmapping.write('\n')
     fmapping.close()
 
-def generate_cn_glyphs():
-    font = ImageFont.truetype("arshanghaisonggbpro_lt.otf", 40)
+def gen_cn_glyphs():
+    font = ImageFont.truetype("resource/arshanghaisonggbpro_lt.otf", 40)
     glyph_table = dict()
     ftable = open('resource/char_mapping.txt', 'r', encoding='utf8')
 
@@ -251,17 +251,32 @@ def txt_to_mapped_txt(text):
     for i in range(len(text)):
         out_text = out_text + mapping[text[i]]
     
-    # debug log
-    # print(out_text)
-
     return out_text
     
 
 
 def main():
-    # generate_character_mapping()
-    # generate_glyphs()
+    # gen char mapping sample
+    # gen_char_mapping()
+
+    # txt to mapped txt sample
     txt_to_mapped_txt('我们回家前要不要先去唱个歌啊？')
+
+    # font processing sample
+    # fin = open('fontdata_fontdata01.exp', 'rb')
+    # data = fin.read()
+    # glyph_obj = exp_to_glyph(data, 0x82a6) # ぇ
+    # img = glyph_to_img(glyph_obj)
+    # img.save('output_font/test_glpyh.png')
+    # fin.close()
+
+    # font file generation sample
+    # fin = open('fontdata_fontdata01.exp', 'rb')
+    # jp_font_data = fin.read()
+    # cn_font_data = font_util.reimport_font_data(jp_font_data)
+    # fout = open('fontdata_fontdata01_cn.exp', 'wb')
+    # fout.write(cn_font_data)
+    # fout.close()
 
 if __name__ == '__main__':
     main()
