@@ -1,5 +1,9 @@
-from PIL import Image, ImageDraw
+from PIL import Image, ImageFont, ImageDraw
 import unicodedata
+import common_util
+import font_util
+import csv_util
+import os
 
 code_table = [
 0xDC, 0xE6, 0x72, 0x8F, 0xF4, 0x1E, 0xC9, 0x87, 0x36, 0xD4, 0x81, 0xF2, 0x92, 0xD3, 0xCE, 0xAF,
@@ -66,7 +70,7 @@ def decompress_new(data, code_size, size_raw: int):
                 data_cursor = data_cursor + 2
     return result
 
-def decompress(data, code_size, size_raw: int):
+def decompress(data, code_size, size_raw: int, return_bytes_read: bool):
     a1 = -8
     result = bytearray(size_raw)
     result_offset = 0
@@ -75,6 +79,7 @@ def decompress(data, code_size, size_raw: int):
     if v10 <= 0:
         for i in range(size_raw):
             result[i] = data[i]
+            bytes_read = size_raw
     else:
         v3 = 0
         v4 = a1 + 8
@@ -82,10 +87,13 @@ def decompress(data, code_size, size_raw: int):
         # v11 = 0
         # v12 = a1 + 8
         v6 = 0
+
+        bytes_read = 0
         while True:
             if ((1 << v6) & int.from_bytes(data[v4:v4+2], 'little')) != 0:
                 v7 = -2 * (int.from_bytes(data[v5:v5+2], 'little') >> 7) + result_offset
                 v8 = int.from_bytes(data[v5:v5+2], 'little') & 0x7F
+                bytes_read = v5 + 2
                 while v8 != 0:
                     v91 = result[v7]
                     v92 = result[v7 + 1]
@@ -100,6 +108,7 @@ def decompress(data, code_size, size_raw: int):
                 result[result_offset] = code_table[data[v5]]
                 result[result_offset+1] = code_table[data[v5+1]]
                 result_offset += 2
+                bytes_read = v5 + 2
             v3 += 1
             v5 += 2
             # v11 = v3
@@ -110,11 +119,28 @@ def decompress(data, code_size, size_raw: int):
                 # v12 = v4
             if v3 >= v10:
                 break
-    return result
+    if return_bytes_read:
+        return result, bytes_read
+    else:
+        return result
 
-def uid(prefix, script_id, line_id):
-    script_id_base = 0x1000000
-    return prefix + '_' + format(script_id - script_id_base, '05x') + '_' + format(line_id, '08x')
+def datpack_to_scripts(data):
+    offset = 0x0
+
+    idx = 0
+    scripts = dict()
+    while offset < len(data):
+        script_data = data[8+offset:]
+        script_size_raw = int.from_bytes(data[offset:4+offset], 'little', signed=True)
+        script_code_size = int.from_bytes(data[offset+4:offset+8], 'little', signed=True)
+
+        if script_size_raw != 0:
+            scripts[idx], bytes_read = decompress(script_data, script_code_size, script_size_raw, True)
+            idx = idx + 1
+            offset = offset + 8 + bytes_read
+            print(offset)
+
+    return scripts
 
 def dat_to_scripts(data):
     offset = 0
@@ -128,11 +154,10 @@ def dat_to_scripts(data):
         script_code_size = int.from_bytes(data[offset+12:offset+16], 'little', signed=True)
 
         if script_size_raw != 0:
-            scripts[script_id] = decompress(script_data, script_code_size, script_size_raw)
+            scripts[script_id] = decompress(script_data, script_code_size, script_size_raw, False)
         offset += 8 + script_size_compressed
 
     return scripts
-
 
 def compress(data):
     if len(data) <= 2:
@@ -156,9 +181,13 @@ def compress(data):
         match_result = match(data[start_index: data_cursor], data[data_cursor: data_cursor + lookahead])
         # 若匹配字节串为0,没有匹配到,获取索引
         if match_result[1] <= 0 or match_result[0] <= 0:
-            result.append(code_table.index(data[data_cursor]))
-            result.append(code_table.index(data[data_cursor + 1]))
-            data_cursor += 2
+            try:
+                result.append(code_table.index(data[data_cursor]))
+                result.append(code_table.index(data[data_cursor + 1]))
+                data_cursor += 2
+            except Exception:
+                print(data_cursor, len(data))
+                raise Exception('???')
         # 若匹配到了,直接存储复制信息
         else:
             # 计算出偏移量,数据指针绝对位置减去开始复制时的绝对位置
@@ -177,7 +206,6 @@ def compress(data):
         result[flag_index] = flag & 0xFF
         result[flag_index + 1] = (flag >> 8) & 0xFF
     return result
-
 
 def match(window_data, lookahead_data):
     index = 0
@@ -200,11 +228,9 @@ def match(window_data, lookahead_data):
         window_cursor += 2
     return [index, max_length]
 
-
 # 获取压缩数据解压时需要的迭代次数code_size
 def get_code_size(data):
     return (len(data) // 34) * 16 + (len(data) % 34 - 2) // 2
-
 
 # 只映射code_table,不进行压缩,可以保证解压后数据不会出错,但会导致文件变大,备选方案
 def compress_dummy(data):
@@ -222,7 +248,6 @@ def compress_dummy(data):
         data_cursor += 2
         count += 1
     return result
-
 
 # 打包成dat文件,包含压缩过程,将字典里的数据压缩成可输出的字节串
 # 传入scripts字典,key为script_id,value为txt_to_script的返回值
@@ -246,6 +271,40 @@ def scripts_to_dat(scripts: dict):
 
     return result
 
+# convert dat to chinese version using cn_txts
+def reimport_dat_with_cn_txts(jp_dat, cn_txts: dict):
+    jp_scripts = dat_to_scripts(jp_dat)
+    cn_scripts = dict()
+    for script_id, jp_script in jp_scripts.items():
+        if script_id not in cn_txts:
+            cn_script = jp_script
+        else:
+            cn_script = reimport_script_with_cn_txts(jp_script, cn_txts[script_id])
+        cn_scripts[script_id] = cn_script
+    return scripts_to_dat(cn_scripts)
+
+# convert script to chinese version using cn_txts
+def reimport_script_with_cn_txts(jp_script, cn_txts: dict) -> bytearray:
+    cn_script = bytearray()
+    offset = 0
+    while offset < len(jp_script):
+        line_id = int.from_bytes(jp_script[offset:offset+4], 'little')
+        jp_size = int.from_bytes(jp_script[offset+4:offset+8], 'little')
+        cn_script.extend(jp_script[offset:offset+4])
+
+        if line_id in cn_txts:
+            txt_encoded = font_util.txt_to_mapped_txt(cn_txts[line_id]).encode('sjis')
+            cn_size = len(txt_encoded)
+            size_after_padding = (cn_size + 4) // 4 * 4
+            cn_script.extend(size_after_padding.to_bytes(4, 'little'))
+            cn_script.extend(txt_encoded)
+            if size_after_padding - cn_size != 0:
+                cn_script.extend(bytearray(size_after_padding - cn_size))
+        else:
+            cn_script.extend(jp_script[offset+4:offset+8+jp_size])
+        
+        offset = offset + 8 + jp_size
+    return cn_script
 
 def script_to_txts(prefix, script_id, data):
     offset = 0
@@ -275,84 +334,89 @@ def script_to_txts(prefix, script_id, data):
         if text_str != '<binary data>':
             # extra filter:
 
-            txts[uid(prefix, script_id, line_id)] = text_str
+            txts[common_util.uid(prefix, script_id, line_id)] = text_str
 
         offset = offset + 8 + size
     return txts
 
-class Glyph:
-    glyph = bytearray()
-    width = 0
-    height = 0
-    offsetx = 0
-    offsety = 0
+def gen_cn_dat():
+    csv_file_list = ['chapter1.csv', 'chapter2.csv', 'chapter3.csv',
+                     'chapter4.csv', 'chapter5.csv', 'chapter6.csv',
+                     'chapter1_extra.csv']
+    csv_data = []
 
-# @param char_sjis shift-jis encoding of character(2 bytes)
-def exp_to_glyph(data, char_sjis):
-    canvas = bytearray()
-    # 4-byte EXF1
-    if data[:4].decode('ascii') != 'EXF1':
-        print('Invalid font data')
-        return canvas
-    image_height = data[4]
-    image_width = data[5]
-
-    canvas = bytearray(image_width * image_height)
-
-    image_width2 = data[6] # for alphabet glyphs maybe; almost useless, can be ignored
-    height_padding = data[7] # no working? almost useless, can be ignored
-    width_padding = data[8]
-    char_table_size = int.from_bytes(data[10:12], 'little') + 1
-
-    # index table consists of 4-bytes offsets relative to 'glyph_table_offset'
-    index_table_size = char_table_size * 4
-    index_table_offset = 0x10
-    glyph_table_offset = index_table_size + index_table_offset # 0x3f140 for fontdata_fontdata01.exp
-
-    index = int.from_bytes(data[char_sjis * 4 + index_table_offset:char_sjis * 4 + index_table_offset + 4], 'little')
-    glyph_offset = glyph_table_offset + index
-    glyph_size = int.from_bytes(data[glyph_offset:glyph_offset+2], 'little')
-    glyph_width = data[glyph_offset + 2]
-    glyph_height = data[glyph_offset + 3]
-    # glyph_size == glyph_width * glyph_height
-    glyph_bearingx = data[glyph_offset + 4] # bearing or just offset?
-    glyph_bearingy = data[glyph_offset + 5] # bearing or just offset?
-
-    glyph = data[glyph_offset+6:glyph_offset+6+glyph_size]
-
-    glyph_obj = Glyph()
-    glyph_obj.glyph = glyph
-    glyph_obj.width = glyph_width
-    glyph_obj.height = glyph_height
-    glyph_obj.offsetx = glyph_bearingx
-    glyph_obj.offsety = glyph_bearingy
-
-    return glyph_obj
-
-# used for test only
-def glyph_to_img(glyph_obj: Glyph):
-    # a 60*60 canvas
-    print(glyph_obj.height, glyph_obj.width)
-    img = Image.new("RGB", (60, 60))
-    for i in range(glyph_obj.height):
-        for j in range(glyph_obj.width):
-            gray_scale = glyph_obj.glyph[i*glyph_obj.width + j]
-            img.putpixel((j+glyph_obj.offsetx, i+glyph_obj.offsety), (gray_scale, gray_scale, gray_scale))
-    
-    return img
-    
-
+    input_dir = 'input'
+    for csv_file in csv_file_list:
+        try:
+            fin = open(input_dir + '/' + csv_file, 'r', encoding='utf8')
+            # ignore header
+            fin.readline()
+            csv_data.extend(fin.readlines())
+            fin.close()
+        except Exception:
+            print('Warning: file %s not exists.' % csv_file)
+            continue
+    cn_txts = csv_util.csvs_to_cn_txts(csv_data)
+    fin = open('event_script.dat', 'rb')
+    jp_dat = fin.read()
+    fin.close()
+    cn_dat = reimport_dat_with_cn_txts(jp_dat, cn_txts)
+    output_dir = 'output_dat'
+    fout = open(output_dir + '/' + 'event_script_cn.dat', 'wb')
+    fout.write(cn_dat)
+    fout.close()
 
 def main():
+    gen_cn_dat()
     # script processing sample
-    fin = open('event_script.dat', 'rb')
-    data = fin.read()
-    fin.close()
-    scripts = dat_to_scripts(data)
-    for script_id, data in scripts.items():
-        fout = open('output_data/%d.dat' % script_id, 'wb')
-        fout.write(data)
-        fout.close()
+    # fin = open('event_script.dat', 'rb')
+    # data = fin.read()
+    # fin.close()
+    # scripts = dat_to_scripts(data)
+    # for script_id, data in scripts.items():
+    #     fout = open('output_data/%d.dat' % script_id, 'wb')
+    #     fout.write(data)
+    #     fout.close()
+    # dir_path = "output_data"
+    # files = os.listdir(dir_path)
+    # files.sort()
+    # scripts = dict()
+    # for file in files:
+    #     if not file.endswith('dat'):
+    #         continue
+    #     script_id = int(file.split('.')[0])
+    #     fin = open(dir_path + '/' + file, 'rb')
+    #     scripts[script_id] = fin.read()
+    #     fin.close()
+    
+    # fout = open('event_script_cn.dat', 'wb')
+    # print('b4')
+    # fout.write(scripts_to_dat(scripts))
+    # print('after')
+    # fout.close()
+
+    # script processing sample
+    # fin = open('event_mazeevent.dat', 'rb')
+    # data = fin.read()
+    # fin.close()
+    # scripts = dat_to_scripts(data)
+    # for script_id, data in scripts.items():
+    #     fout = open('output_csv_maze/%d.dat.txt' % script_id, 'w', encoding='utf-8')
+    #     for uid, txt in script_to_txts('maze', script_id, data).items():
+    #         fout.write(uid + ',' + txt + '\n')
+    #     fout.close()
+
+    # script processing sample
+    # fin = open('table_tablepack.dat', 'rb')
+    # data = fin.read()
+    # fin.close()
+    # scripts = datpack_to_scripts(data)
+    # for script_id, data in scripts.items():
+    #     fout = open('output_tablepack/%d.dat' % script_id, 'wb')
+    #     # for uid, txt in script_to_txts('tablepack', script_id, data).items():
+    #         #fout.write(uid + ',' + txt + '\n')
+    #     fout.write(data)
+    #     fout.close()
 
     # font processing sample
     # fin = open('fontdata_fontdata01.exp', 'rb')
@@ -361,6 +425,15 @@ def main():
     # img = glyph_to_img(glyph_obj)
     # img.save('output_font/test_glpyh.png')
     # fin.close()
+
+    # font file generation sample
+    # fin = open('fontdata_fontdata01.exp', 'rb')
+    # jp_font_data = fin.read()
+    # cn_font_data = generate_cn_font_data(jp_font_data)
+    # fout = open('fontdata_fontdata01_cn.exp', 'wb')
+    # fout.write(cn_font_data)
+    # fout.close()
+    
 
 if __name__ == '__main__':
     main()
