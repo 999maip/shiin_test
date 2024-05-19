@@ -36,76 +36,19 @@ def remove_ln(l):
     else:
         return l
 
-def export_to_csv(prefix: str, scripts: dict, output_csv):
-    writer = csv.writer(output_csv, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+def export_txts_to_csvfile(txts: dict, csvfile):
+    writer = csv.writer(csvfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
     writer.writerow(['location', 'source', 'target', 'ID',
                      'fuzzy', 'context', 'translator_comments', 'developer_comments'])
-    for script_id, script_data in scripts.items():
-        txts = shiin.script_to_txts(prefix, script_id, script_data)
-        if len(txts) == 0:
-            continue
-        for uid, txt in txts.items():
-            writer.writerow(['', txt, '', '', '', uid, '', ''])
-
-def export_main_script():
-    fin = open('event_script.dat', 'rb')
-    data = fin.read()
-    fin.close()
-
-    # all remaining scripts will be considered as chapter 6 contents.
-    chapter_script_id_ranges = {
-        'chapter1': [[16842753], [17039361, 17039389]],
-        'chapter1_extra': [[17039561, 17039599]],
-        'chapter2': [[16842754], [17039390, 17039414], [17039662]],
-        'chapter3': [[16842755], [16973828, 16973830], [17039416, 17039439]],
-        'chapter4': [[16842756], [17039440, 17039466], [17039761]],
-        'chapter5': [[16842757], [17039467, 17039502]],
-    }
-
-    scripts = shiin.dat_to_scripts(data)
-    used = dict()
-
-    for chapter_id, script_id_ranges in chapter_script_id_ranges.items():
-        chapter_scripts = dict()
-        for script_id_range in script_id_ranges:
-            if len(script_id_range) == 1:
-                # single script
-                chapter_scripts[script_id_range[0]] = scripts[script_id_range[0]]
-                used[script_id_range[0]] = True
-            else:
-                # script range
-                for script_id in range(script_id_range[0], script_id_range[1] + 1):
-                    if script_id in scripts:
-                        chapter_scripts[script_id] = scripts[script_id]
-                        used[script_id] = True
-
-        output_csv = open('output_csv/%s.csv' % chapter_id, 'w', encoding='utf8', newline='')
-        export_to_csv('main', chapter_scripts, output_csv)
-        output_csv.close()
-
-    chapter6_scripts = dict()
-    for script_id, script_data in scripts.items():
-        if script_id not in used:
-            chapter6_scripts[script_id] = script_data
-    output_csv = open('output_csv/chapter6.csv', 'w', encoding='utf8', newline='')
-    export_to_csv('main', chapter6_scripts, output_csv)
-    output_csv.close()
-
-def export_maze_script():
-    fin = open('event_mazeevent.dat', 'rb')
-    data = fin.read()
-    fin.close()
-
-    scripts = shiin.dat_to_scripts(data)
-
-    output_csv = open('output_csv/maze.csv', 'w', encoding='utf8', newline='')
-    export_to_csv('main', scripts, output_csv)
-    output_csv.close()
+    for uid, txt in txts.items():
+        writer.writerow(['', txt, '', '', '', uid, '', ''])
 
 def csvs_to_cn_txts(csv_data: list[str]):
     cn_txts = dict()
     for line in csv_data:
         line = line.strip()
+        if len(line) == 0:
+            continue
         line_data = line.split(',')
         line_cn_txt = line_data[2]
         global_line_id = line_data[5]

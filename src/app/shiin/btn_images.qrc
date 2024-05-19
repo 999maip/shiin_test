@@ -1,0 +1,13 @@
+<RCC>
+    <qresource prefix="/images">
+        <file>to_cn_normal.png</file>
+        <file>exit_default.bmp</file>
+        <file>exit_pressed.bmp</file>
+        <file>readme_default.bmp</file>
+        <file>readme_pressed.bmp</file>
+        <file>recover_default.bmp</file>
+        <file>recover_pressed.bmp</file>
+        <file>to_cn_default.bmp</file>
+        <file>to_cn_pressed.bmp</file>
+    </qresource>
+</RCC>
