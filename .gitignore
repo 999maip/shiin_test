@@ -13,6 +13,6 @@ output_csv
 output_csv_maze
 output_script
 output_font
-src/app/shiin/build
-src/app/shiin/CMakeLists.txt.user
-src/app/shiin/title02.ivf
+build
+CMakeLists.txt.user
+title02.ivf
