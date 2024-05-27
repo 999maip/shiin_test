@@ -15,4 +15,5 @@ output_script
 output_font
 build
 CMakeLists.txt.user
-title02.ivf
+translation_files
+text
