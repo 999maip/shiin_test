@@ -15,4 +15,10 @@ output_font
 build
 CMakeLists.txt.user
 translation_files
-text
+generated
+script/gt.png
+script/graphic_title.exg.png
+script/test_glyph.png
+script/test_glyph2.png
+script/img_title_part.png
+script/text

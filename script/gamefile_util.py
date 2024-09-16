@@ -304,6 +304,27 @@ def script_to_txts(prefix, script_id, data):
         offset = offset + 8 + size
     return txts
 
+def save_exg_to_png(exg, filename):
+    offset = 0x10
+    width = int.from_bytes(exg[offset:offset+2], 'little')
+    height = int.from_bytes(exg[offset+2:offset+4], 'little')
+
+    offset = 0x28
+    img = Image.new("RGBA", (width, height), (255,255,255,255))
+    for x in range(height):
+        for y in range(width):
+            b = int(exg[offset])
+            g = int(exg[offset+1])
+            r = int(exg[offset+2])
+            a = int(exg[offset+3])
+            img.putpixel((x, y), (a, r, g, b))
+            offset = offset + 4
+    img.save(filename)
+    
+    
+
+    
+
 # convert png data to .exg data
 def png_to_exg(png, old_exg):
     exg = bytearray()

@@ -3,6 +3,7 @@ import font_util
 import csv_util
 import patch_util
 import gamefile_util
+import common_util 
 import argparse
 import sys
 from config import *
@@ -147,18 +148,95 @@ def reimport_exg():
 
 def export_datpack_sample():
     # table_tablepack script processing sample
-    fin = open('table_tablepack.dat', 'rb')
+    fin = open(GAME_RESOURCE_DIR + '/table_tablepack.dat', 'rb')
     data = fin.read()
     fin.close()
     scripts = gamefile_util.datpack_to_scripts(data)
     for script_id, data in scripts.items():
-        fout = open('output_tablepack/%d.dat' % script_id, 'wb')
-        # for uid, txt in script_to_txts('tablepack', script_id, data).items():
-            #fout.write(uid + ',' + txt + '\n')
-        fout.write(data)
-        fout.close()
+        with open('output_tablepack/%d.dat' % script_id, 'wb') as fout:
+            fout.write(data)
 
-def export_datpack_sample():
+def export_item_txt():
+    with open('output_tablepack/4.dat', 'rb') as item_file:
+        items_data = item_file.read()
+    line_number = 1
+    txts = dict()
+    offset = 0
+    # item block data structure:
+    # total size: 0x170
+    # 0x00: item_name
+    # 0x1A: item_description
+    while offset < len(items_data):
+        inner_offset = 0
+        while offset < len(items_data) and inner_offset < 0x1A and items_data[offset+inner_offset] != 0x00:
+            inner_offset = inner_offset + 1
+        item_name = items_data[offset:offset+inner_offset].decode('shift-jis')
+        txts[common_util.uid('item', common_util.SCRIPT_ID_BASE, line_number)] = item_name
+        line_number = line_number + 1
+        inner_offset = 0x1A
+        while offset < len(items_data) and inner_offset < 0x170 and items_data[offset+inner_offset] != 0x00:
+            inner_offset = inner_offset + 1
+        item_description = items_data[offset+0x1A:offset+inner_offset].decode('shift-jis')
+        txts[common_util.uid('item', common_util.SCRIPT_ID_BASE, line_number)] = item_description
+        line_number = line_number + 1
+        offset = offset + 0x170
+    with open(OUTPUT_DIR + '/%s.csv' % 'item', 'w', encoding='utf8', newline='') as output_csv:
+        csv_util.export_txts_to_csvfile(txts, output_csv)
+
+def export_battle_txt():
+    with open('output_tablepack/11.dat', 'rb') as battle_file:
+        battle_data = battle_file.read()
+    line_number = 1
+    txts = dict()
+    offset = 0
+    # battle action block data structure:
+    # total size: 0x64
+    # 0x00-0x03: unknown
+    # 0x04-0x07: action id
+    # 0x08-0x0b: unknown
+    # 0x0c: action name
+    # 0x24: action description
+    while offset < len(battle_data):
+        inner_offset = 0x04
+        action_id = int.from_bytes(battle_data[offset+inner_offset:offset+inner_offset+4], 'little')
+        inner_offset = 0x0c
+        while offset < len(battle_data) and inner_offset < 0x24 and battle_data[offset+inner_offset] != 0x00:
+            inner_offset = inner_offset + 1
+        action_name = battle_data[offset+0x0c:offset+inner_offset].decode('shift-jis')
+        txts[common_util.uid('battle', common_util.SCRIPT_ID_BASE, line_number)] = action_name 
+        line_number = line_number + 1
+        inner_offset = 0x24
+        while offset < len(battle_data) and inner_offset < 0x64 and battle_data[offset+inner_offset] != 0x00:
+            inner_offset = inner_offset + 1
+        action_description = battle_data[offset+0x24:offset+inner_offset].decode('shift-jis')
+        txts[common_util.uid('battle', common_util.SCRIPT_ID_BASE, line_number)] = action_description 
+        line_number = line_number + 1
+        offset = offset + 0x64
+    with open(OUTPUT_DIR + '/%s.csv' % 'battle', 'w', encoding='utf8', newline='') as output_csv:
+        csv_util.export_txts_to_csvfile(txts, output_csv)
+
+def export_battle_comb_txt():
+    with open('output_tablepack/12.dat', 'rb') as battle_file:
+        battle_data = battle_file.read()
+    line_number = 1
+    txts = dict()
+    offset = 0x48
+    # battle comb-action block data structure:
+    # total size: 0x48
+    # 0x00-0x07: unknown
+    # 0x08: action description
+    while offset < len(battle_data):
+        inner_offset = 0x08
+        while offset < len(battle_data) and inner_offset < 0x48 and battle_data[offset+inner_offset] != 0x00:
+            inner_offset = inner_offset + 1
+        action_name = battle_data[offset+0x08:offset+inner_offset].decode('shift-jis')
+        txts[common_util.uid('battle_comb', common_util.SCRIPT_ID_BASE, line_number)] = action_name 
+        line_number = line_number + 1
+        offset = offset + 0x48
+    with open(OUTPUT_DIR + '/%s.csv' % 'battle_comb', 'w', encoding='utf8', newline='') as output_csv:
+        csv_util.export_txts_to_csvfile(txts, output_csv)
+
+def export_datpack_sample_1():
     # table_tablepack script processing sample
     fin = open(GAME_RESOURCE_DIR + '/map_mapdatpack.dat', 'rb')
     data = fin.read()
@@ -251,8 +329,11 @@ def parse_args():
 
 
 def main():
-    parse_args()
-    # export_datpack_sample()
+    # parse_args()
+    export_datpack_sample()
+    # export_item_txt()
+    # export_battle_txt()
+    # export_battle_comb_txt()
 
 if __name__ == '__main__':
     main()
