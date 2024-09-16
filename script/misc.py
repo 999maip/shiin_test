@@ -1,5 +1,25 @@
 from PIL import Image, ImageFont, ImageDraw
-import random
+import font_util
+import csv_util
+import patch_util
+import gamefile_util
+import common_util 
+import argparse
+import sys
+from config import *
+
+def debug_output_raw_script_dat():
+    # with open(GAME_RESOURCE_DIR + '/' + 'event_script.dat', 'rb') as fin:
+    with open(GAME_RESOURCE_DIR + '/' + 'event_mazeevent.dat', 'rb') as fin:
+        data = fin.read()
+
+    scripts = gamefile_util.dat_to_scripts(data)
+    for script_id, script_data in scripts.items():
+        fout = open('scripts_raw_mazeevent/%d.dat' % script_id, 'wb')
+        fout.write(scripts[script_id])
+        fout.close()
+
+debug_output_raw_script_dat()
 
 # the following code snippets are only left for reference.
 def old_debug_codes():

@@ -92,19 +92,18 @@ def export_main_script():
     if len(txts) == 0:
         return
     with open(OUTPUT_DIR + '/chapter6.csv', 'w', encoding='utf8', newline='') as output_csv:
-        csv_util.export_txts_to_csvfile('main', chapter6_scripts, output_csv)
+        csv_util.export_txts_to_csvfile('main', txts, output_csv)
 
 def export_maze_script():
-    fin = open(GAME_RESOURCE_DIR + '/event_mazeevent.dat', 'rb')
-    data = fin.read()
-    fin.close()
+    with open(GAME_RESOURCE_DIR + '/event_mazeevent.dat', 'rb') as fin:
+        data = fin.read()
 
     scripts = gamefile_util.dat_to_scripts(data)
     txts = dict()
     for script_id, script_data in scripts.items():
         txts = txts | gamefile_util.script_to_txts('maze', script_id, script_data)
     with open(OUTPUT_DIR + '/maze.csv', 'w', encoding='utf8', newline='') as output_csv:
-        csv_util.export_txts_to_csvfile(scripts, output_csv)
+        csv_util.export_txts_to_csvfile(txts, output_csv)
 
 def reimport_main_script():
     csv_data = []
@@ -329,8 +328,9 @@ def parse_args():
 
 
 def main():
+    export_maze_script()
     # parse_args()
-    export_datpack_sample()
+    # export_datpack_sample()
     # export_item_txt()
     # export_battle_txt()
     # export_battle_comb_txt()
