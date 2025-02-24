@@ -285,7 +285,7 @@ def script_to_txts(prefix, script_id, data):
                 while data[idx] == 0 and idx >= offset + 8:
                     idx = idx - 1
 
-                text_str = data[offset+8:idx+1].decode(encoding='sjis')
+                text_str = data[offset+8:idx+1].decode(encoding='cp932')
 
                 if len(data[offset+8:idx+1]) == 1:
                     text_str = '<binary data>'
@@ -338,4 +338,6 @@ def png_to_exg(png, old_exg):
             exg.append(g)
             exg.append(r)
             exg.append(a)
+    if len(exg) < len(old_exg):
+        exg.extend(old_exg[len(exg):])
     return exg

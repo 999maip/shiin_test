@@ -5,6 +5,7 @@
 *.7z
 *.exp
 *.zip_origin
+*.exe
 script/texture_test/**
 patch
 __pycache__

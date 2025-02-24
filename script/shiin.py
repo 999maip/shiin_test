@@ -6,7 +6,10 @@ import gamefile_util
 import common_util 
 import argparse
 import sys
+import os
 from config import *
+from zipfile import ZipFile
+import zipfile
 
 # reimport localized txts to .dat file
 def reimport_dat_with_cn_txts(jp_dat, cn_txts: dict):
@@ -92,7 +95,7 @@ def export_main_script():
     if len(txts) == 0:
         return
     with open(OUTPUT_DIR + '/chapter6.csv', 'w', encoding='utf8', newline='') as output_csv:
-        csv_util.export_txts_to_csvfile('main', txts, output_csv)
+        csv_util.export_txts_to_csvfile(txts, output_csv)
 
 def export_maze_script():
     with open(GAME_RESOURCE_DIR + '/event_mazeevent.dat', 'rb') as fin:
@@ -135,25 +138,6 @@ def replace_title_example():
         title_png = png_file.read()
     with open('texture_test/graphic_title_cn.exg', 'wb') as exg_file:
         exg_file.write(gamefile_util.png_to_exg(title_png, old_title_exg))
-
-def reimport_exg():
-    # replace title example
-    with open('texture_test/graphic_title.exg', 'rb') as old_exg_file:
-        old_title_exg = old_exg_file.read()
-    with open('texture_test/graphic_title_cn.png', 'rb') as png_file:
-        title_png = png_file.read()
-    with open('texture_test/graphic_title_cn.exg', 'wb') as exg_file:
-        exg_file.write(gamefile_util.png_to_exg(title_png, old_title_exg))
-
-def export_datpack_sample():
-    # table_tablepack script processing sample
-    fin = open(GAME_RESOURCE_DIR + '/table_tablepack.dat', 'rb')
-    data = fin.read()
-    fin.close()
-    scripts = gamefile_util.datpack_to_scripts(data)
-    for script_id, data in scripts.items():
-        with open('output_tablepack/%d.dat' % script_id, 'wb') as fout:
-            fout.write(data)
 
 def export_item_txt():
     with open('output_tablepack/4.dat', 'rb') as item_file:
@@ -271,6 +255,30 @@ def export_ui_dds():
             fout.close()
             idx = idx + 1
 
+def export_battle_txt_in_exe():
+    with open(GAME_RESOURCE_DIR + '/Death Mark.exe', 'rb') as exe:
+        exe_data = exe.read()
+    line_number = 1
+    txts = dict()
+    offset = 0x314E04
+    MSG_TABLE_END = 0x315E5A
+    # exe battle text block data structure:
+    # 0-ending strings
+    while offset < MSG_TABLE_END:
+        if exe_data[offset] == 0x00:
+            offset = offset + 1
+            continue
+        inner_offset = 0x00
+        while exe_data[offset+inner_offset] != 0x00:
+            inner_offset = inner_offset + 1
+        exe_txt = exe_data[offset:offset+inner_offset].decode('shift-jis')
+        txts[common_util.uid('exe', common_util.SCRIPT_ID_BASE, line_number)] = exe_txt
+        line_number = line_number + 1
+        offset = offset + inner_offset
+
+    with open(OUTPUT_DIR + '/%s.csv' % 'exe_cn', 'w', encoding='utf8', newline='') as output_csv:
+        csv_util.export_txts_to_csvfile(txts, output_csv)
+
 def gen_cn_font():
     # generate a character table for needed characters
     print('start generating character table using translation files...')
@@ -328,11 +336,14 @@ def parse_args():
 
 
 def main():
-    export_maze_script()
+    pass
+    # export_main_script()
+    # export_maze_script()
     # parse_args()
     # export_datpack_sample()
     # export_item_txt()
     # export_battle_txt()
+    # export_battle_txt_in_exe()
     # export_battle_comb_txt()
 
 if __name__ == '__main__':
