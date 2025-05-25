@@ -23,13 +23,16 @@ code_table = [
 
 # data为压缩数据,code_size为压缩后的数据处理次数,size_raw为解压后数据大小
 # optimized version
-def decompress_new(data, code_size, size_raw: int):
+def decompress_new(data, code_size, size_raw: int, return_bytes_read: bool):
     result = bytearray(size_raw)
     result_cursor = 0
     if code_size <= 0:
         for i in range(size_raw):
             result[i] = data[i]
-        return result
+        if return_bytes_read:
+            return result, size_raw
+        else:
+            return result
     else:
         flag_cursor = 0
         data_cursor = 2
@@ -44,6 +47,7 @@ def decompress_new(data, code_size, size_raw: int):
 
                 # second_cursor位置后7位存储重复的长度
                 length = int.from_bytes(data[data_cursor:data_cursor + 2], 'little') & 0x7F
+                old_result_cursor = result_cursor
                 for _ in range(length):
                     first_byte = result[copy_start_cursor]
                     second_byte = result[copy_start_cursor + 1]
@@ -52,6 +56,7 @@ def decompress_new(data, code_size, size_raw: int):
                     result[result_cursor + 1] = second_byte
                     # 更新result_cursor
                     result_cursor += 2
+                
             # flag为0，从码表获取数据
             else:
                 # 读取second_cursor位置的数据作为索引找到码表，换句话说second_cursor位置存储了对应码表的索引
@@ -66,7 +71,10 @@ def decompress_new(data, code_size, size_raw: int):
                 # 更新标记指针flag_cursor
                 flag_cursor = data_cursor
                 data_cursor = data_cursor + 2
-    return result
+    if return_bytes_read:
+        return result, data_cursor
+    else:
+        return result
 
 def decompress(data, code_size, size_raw: int, return_bytes_read: bool):
     a1 = -8
@@ -122,23 +130,66 @@ def decompress(data, code_size, size_raw: int, return_bytes_read: bool):
     else:
         return result
 
-def datpack_to_scripts(data):
+# A datpack is composed of several encrypted dat files concatenated together.
+def datpack_to_decrypted_file_list(data) -> list[bytearray]:
     offset = 0x0
-
-    idx = 0
-    scripts = dict()
+    file_list = []
     while offset < len(data):
-        script_data = data[8+offset:]
         script_size_raw = int.from_bytes(data[offset:4+offset], 'little', signed=True)
         script_code_size = int.from_bytes(data[offset+4:offset+8], 'little', signed=True)
+        script_data = data[offset+8:]
 
         if script_size_raw != 0:
-            scripts[idx], bytes_read = decompress(script_data, script_code_size, script_size_raw, True)
-            idx = idx + 1
+            decrypted_file, bytes_read = decompress(script_data, script_code_size, script_size_raw, True)
+            file_list.append(decrypted_file)
             offset = offset + 8 + bytes_read
-            print(offset)
 
-    return scripts
+    return file_list
+
+def decrypted_file_list_to_datpack(header: bytearray, file_list: list[bytearray]) -> tuple[bytearray, bytearray]:
+    result = bytearray()
+    # header layout:
+    # 0x00~0x07 file type magic number
+    # 0x08~0x11 number of files
+    # 0x12~0x15 per entry size
+    # per entry:
+    # 0x00~ filename
+    # 0x40~ file size in the datpack file
+    # 0x44~ file offset in the datpack file
+
+    offset = 0
+    for index, file in enumerate(file_list):
+        # field offsets in the header file
+        compressed_size_offset = 0x10 + index * 0x48 + 0x40
+        file_offset_offset = 0x10 + index * 0x48 + 0x44
+
+        compressed_file = compress(file)
+        # original file size
+        result.extend(len(file).to_bytes(4, 'little'))
+        # code size
+        result.extend(get_code_size(compressed_file).to_bytes(4, 'little'))
+        # compressed file content
+        result.extend(compressed_file)
+
+        header[compressed_size_offset:compressed_size_offset+4] = (len(compressed_file) + 8).to_bytes(4, 'little')
+        header[file_offset_offset:file_offset_offset+4] = offset.to_bytes(4, 'little')
+
+        offset += len(compressed_file) + 8
+    
+    return (header, result)
+
+# param[in] reimport file list: a list consists of (file_index, file_content) pairs
+def reimport_datpack(header_data: bytearray, original_datpack, reimport_file_list):
+    file_list = datpack_to_decrypted_file_list(original_datpack)
+
+    # reimport
+    for file_index, file_content in reimport_file_list:
+        file_list[file_index] = file_content
+
+    return decrypted_file_list_to_datpack(header_data, file_list)
+
+
+
 
 
 def dat_to_scripts(data):
@@ -200,8 +251,8 @@ def match(window_data, lookahead_data):
 def compress(data):
     if len(data) <= 2:
         return data
-    window = 1 << 10
-    lookahead = 1 << 8
+    window = (1 << 10) - 2
+    lookahead = (1 << 8) - 2
     data_cursor = 0
     count = 0
     flag_index = 0
@@ -209,19 +260,18 @@ def compress(data):
     result = bytearray()
     while data_cursor < len(data):
         # flag存储判断信息,每16次添加2个占位字节,并更新该占位字节的索引
-        if count & 0xF == 0:
-            result.append(0)
-            result.append(0)
-            flag_index = len(result) - 2
+        if (count & 0xF) == 0:
+            flag_index = len(result)
+            result.extend(b'\x00\x00')
             flag = 0
         # 小于窗口长度,从数据头开始匹配字节串,否则从数据窗口起点开始匹配
         start_index = 0 if data_cursor <= window else data_cursor - window
         match_result = match(data[start_index: data_cursor], data[data_cursor: data_cursor + lookahead])
         # 若匹配字节串为0,没有匹配到,获取索引
-        if match_result[1] <= 0 or match_result[0] <= 0:
+        if match_result[1] <= 0:
             try:
                 result.append(code_table.index(data[data_cursor]))
-                result.append(code_table.index(data[data_cursor + 1]))
+                result.append(code_table.index(data[data_cursor+1]))
                 data_cursor += 2
             except Exception:
                 print(data_cursor, len(data))
@@ -229,6 +279,7 @@ def compress(data):
         # 若匹配到了,直接存储复制信息
         else:
             # 计算出偏移量,数据指针绝对位置减去开始复制时的绝对位置
+            # abs offset: match_result[0] + start_index
             offset = (data_cursor - match_result[0] - start_index) << 6
             # 计算出长度
             length = match_result[1] >> 1
@@ -243,6 +294,7 @@ def compress(data):
         # 更新flag
         result[flag_index] = flag & 0xFF
         result[flag_index + 1] = (flag >> 8) & 0xFF
+    
     return result
 
 # 获取压缩数据解压时需要的迭代次数code_size

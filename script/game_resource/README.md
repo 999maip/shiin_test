@@ -6,3 +6,4 @@ Files required(relative to the game install path):
 - resource/event\_script.dat
 - resource/event\_mazeevent.dat
 - resource/table\_tablepack.dat
+- resource/table\_tablepack.hed

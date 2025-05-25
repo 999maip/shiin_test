@@ -10,22 +10,26 @@ import os
 from config import *
 from zipfile import ZipFile
 import zipfile
+import example
 
 # reimport localized txts to .dat file
 def reimport_dat_with_cn_txts(jp_dat, cn_txts: dict):
     jp_scripts = gamefile_util.dat_to_scripts(jp_dat)
     cn_scripts = dict()
+
+    char_mapping = font_util.load_char_mapping()
+
     for script_id, jp_script in jp_scripts.items():
         if script_id not in cn_txts:
             cn_script = jp_script
         else:
-            cn_script = reimport_script_with_cn_txts(jp_script, cn_txts[script_id])
+            cn_script = reimport_script_with_cn_txts(jp_script, cn_txts[script_id], char_mapping)
         cn_scripts[script_id] = cn_script
     return gamefile_util.scripts_to_dat(cn_scripts)
 
 # reimport localized texts to script data
 # NOTE: Do not call this function directly. Call reimport_dat_with_cn_txts() instead.
-def reimport_script_with_cn_txts(jp_script, cn_txts: dict) -> bytearray:
+def reimport_script_with_cn_txts(jp_script, cn_txts: dict, char_mapping) -> bytearray:
     cn_script = bytearray()
     offset = 0
     while offset < len(jp_script):
@@ -34,7 +38,7 @@ def reimport_script_with_cn_txts(jp_script, cn_txts: dict) -> bytearray:
         cn_script.extend(jp_script[offset:offset+4])
 
         if line_id in cn_txts:
-            txt_encoded = font_util.txt_to_mapped_txt(cn_txts[line_id]).encode('sjis')
+            txt_encoded = font_util.txt_to_mapped_txt(cn_txts[line_id], char_mapping).encode('sjis')
             cn_size = len(txt_encoded)
             size_after_padding = (cn_size + 4) // 4 * 4
             cn_script.extend(size_after_padding.to_bytes(4, 'little'))
@@ -98,15 +102,33 @@ def export_main_script():
         csv_util.export_txts_to_csvfile(txts, output_csv)
 
 def export_maze_script():
-    with open(GAME_RESOURCE_DIR + '/event_mazeevent.dat', 'rb') as fin:
+    with open(os.path.join(GAME_RESOURCE_DIR, 'event_mazeevent.dat'), 'rb') as fin:
         data = fin.read()
 
     scripts = gamefile_util.dat_to_scripts(data)
     txts = dict()
     for script_id, script_data in scripts.items():
         txts = txts | gamefile_util.script_to_txts('maze', script_id, script_data)
-    with open(OUTPUT_DIR + '/maze.csv', 'w', encoding='utf8', newline='') as output_csv:
+    with open(os.path.join(OUTPUT_DIR, 'maze.csv'), 'w', encoding='utf8', newline='') as output_csv:
         csv_util.export_txts_to_csvfile(txts, output_csv)
+
+def reimport_maze_script():
+    csv_data = []
+    try:
+        with open(os.path.join(TEXT_DIR, 'maze_cn.csv',), 'r', encoding='utf8') as fin:
+            # ignore header
+            fin.readline()
+
+            csv_data.extend(fin.readlines())
+    except Exception as e:
+        print('Warning: file maze_cn.csv not exists.')
+        raise e
+    cn_txts = csv_util.csvs_to_cn_txts(csv_data)
+    with open(os.path.join(GAME_RESOURCE_DIR, 'event_mazeevent.dat'), 'rb') as fin:
+        jp_dat = fin.read()
+    cn_dat = reimport_dat_with_cn_txts(jp_dat, cn_txts)
+    with open(os.path.join(OUTPUT_DIR, 'event_mazeevent.dat'), 'wb') as fout:
+        fout.write(cn_dat)
 
 def reimport_main_script():
     csv_data = []
@@ -166,6 +188,51 @@ def export_item_txt():
     with open(OUTPUT_DIR + '/%s.csv' % 'item', 'w', encoding='utf8', newline='') as output_csv:
         csv_util.export_txts_to_csvfile(txts, output_csv)
 
+# reimports the item data
+def reimport_item_txt():
+    # each item is represented by two lines,
+    # the first for the name, and the second for the description.
+    item_list_cn = csv_util.load_csv_file(os.path.join(TEXT_DIR, 'item_cn.csv'))
+    ITEM_FILE_INDEX = 4
+
+    with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.dat'), 'rb') as f_table_tablepack:
+        table_tablepack = f_table_tablepack.read()
+    with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.hed'), 'rb') as f_header:
+        header_data = bytearray(f_header.read())
+    item_data = gamefile_util.datpack_to_decrypted_file_list(table_tablepack)[ITEM_FILE_INDEX]
+
+    char_mapping = font_util.load_char_mapping()
+    offset = 0
+    item_list_idx = 0
+    # item entry layout:  size: 0x170, 0x00~: item_name, 0x1A~: item_description, 0x150~: meta data
+    while offset < len(item_data):
+        # clear the original data first(note that the meta data is kept inpact)
+        item_data[offset:offset + 0x150] = b'\x00' * 0x150
+
+        mapped_item_name = font_util.txt_to_mapped_txt(item_list_cn[item_list_idx][2], char_mapping).encode('shift-jis')
+        if len(mapped_item_name) == 0:
+            mapped_item_name = item_list_cn[item_list_idx][1].encode('shift-jis')
+        item_data[offset:offset+len(mapped_item_name)] = mapped_item_name
+        mapped_item_desc = font_util.txt_to_mapped_txt(item_list_cn[item_list_idx+1][2], char_mapping).encode('shift-jis')
+        if len(mapped_item_desc) == 0:
+            mapped_item_desc = item_list_cn[item_list_idx+1][1].encode('shift-jis')
+        item_data[offset+0x1A:offset+0x1A+len(mapped_item_desc)] = mapped_item_desc
+        offset = offset + 0x170
+        item_list_idx += 2
+    
+    # debug code
+    with open(os.path.join(OUTPUT_DIR, '4.dat'), 'wb') as f_item:
+        f_item.write(item_data)
+    # debug code end
+    
+    header_data, table_tablepack = gamefile_util.reimport_datpack(header_data, table_tablepack, [(ITEM_FILE_INDEX, item_data)])
+
+    with open(os.path.join(OUTPUT_DIR, 'table_tablepack.dat'), 'wb') as f_table_tablepack:
+        f_table_tablepack.write(table_tablepack)
+
+    with open(os.path.join(OUTPUT_DIR, 'table_tablepack.hed'), 'wb') as f_header:
+        f_header.write(header_data)
+
 def export_battle_txt():
     with open('output_tablepack/11.dat', 'rb') as battle_file:
         battle_data = battle_file.read()
@@ -224,7 +291,7 @@ def export_datpack_sample_1():
     fin = open(GAME_RESOURCE_DIR + '/map_mapdatpack.dat', 'rb')
     data = fin.read()
     fin.close()
-    scripts = gamefile_util.datpack_to_scripts(data)
+    scripts = gamefile_util.datpack_to_decrypted_file_list(data)
     for script_id, data in scripts.items():
         fout = open('output_mappack/%d.dat' % script_id, 'wb')
         # for uid, txt in script_to_txts('tablepack', script_id, data).items():
@@ -255,13 +322,55 @@ def export_ui_dds():
             fout.close()
             idx = idx + 1
 
-def export_battle_txt_in_exe():
+def reimport_txt_in_exe():
+    with open(GAME_RESOURCE_DIR + '/exe_cn.csv', 'r', encoding='utf-8') as exe_csv:
+        # ignore header line
+        exe_csv.readline()
+        cn_txts = csv_util.exe_csv_to_cn_txts(exe_csv.readlines())
+
+    with open(GAME_RESOURCE_DIR + '/Death Mark.exe', 'rb') as exe:
+        exe_data = exe.read()
+    line_number = 1
+    jp_txts = dict()
+    offset = 0x314E04
+    MSG_TABLE_END = 0x315EC4
+    # exe text block data structure:
+    # 0-ending strings
+    while offset < MSG_TABLE_END:
+        inner_offset = 0
+        while exe_data[offset+inner_offset] != 0x00:
+            inner_offset = inner_offset + 1
+        exe_txt = exe_data[offset:offset+inner_offset].decode('shift-jis')
+        txt_id = common_util.uid('exe', common_util.SCRIPT_ID_BASE, line_number)
+        jp_txts[txt_id] = exe_txt
+        line_number = line_number + 1
+        padding_zeroes = 0
+        while exe_data[offset+inner_offset] == 0x00 and offset+inner_offset < MSG_TABLE_END:
+            padding_zeroes = padding_zeroes + 1
+            inner_offset = inner_offset + 1
+        offset = offset + inner_offset
+
+        # minus 1 for the at least 1 zero we need for a 0-ending string
+        padding_zeroes = padding_zeroes - 1
+
+        cn_len = 0
+        for ch in cn_txts[txt_id]:
+            if ord(ch) >= 0x7f:
+                cn_len = cn_len + 2
+            else:
+                cn_len = cn_len + 1
+
+        if cn_len - len(exe_txt.encode('shift-jis')) - padding_zeroes > 0:
+            print('original txt:%s. new txt:%s. new/(old+padding) = %d/%d'
+                % (exe_txt, cn_txts[txt_id], cn_len, len(exe_txt.encode('shift-jis')) + padding_zeroes))
+
+def export_txt_in_exe():
     with open(GAME_RESOURCE_DIR + '/Death Mark.exe', 'rb') as exe:
         exe_data = exe.read()
     line_number = 1
     txts = dict()
     offset = 0x314E04
-    MSG_TABLE_END = 0x315E5A
+    MSG_TABLE_END = 0x315EC4
     # exe battle text block data structure:
     # 0-ending strings
     while offset < MSG_TABLE_END:
@@ -309,7 +418,7 @@ def parse_args():
                         Use "all" to export all necessary .dat files.')
     parser.add_argument('--export_ui', dest='export_ui', action='store_true', help='export ui.dat to dds files.')
     parser.add_argument('--gen_patch', dest='patch', action='store_true', help='generate patch files.')
-    parser.add_argument('--reimport', dest='reimport', action='store', choices=['all', 'main', 'maze'], help='reimport localized \
+    parser.add_argument('--reimport', dest='reimport', action='store', choices=['all', 'main', 'maze', 'item'], help='reimport localized \
                         files patch files. Use "all" to export all necessary .dat files.')
     parser.add_argument('--gen_font', dest='font', action='store_true', help='generate the main font \
                         file for Chinese characters.')
@@ -332,19 +441,32 @@ def parse_args():
         elif args.reimport == 'main':
             reimport_main_script()
         elif args.reimport == 'maze':
-            print('function "reimport maze" has not been implemented yet. Please use main instead.')
+            reimport_maze_script()
+        elif args.reimport == 'item':
+            reimport_item_txt()
 
 
 def main():
-    pass
+    parse_args()
+
     # export_main_script()
     # export_maze_script()
-    # parse_args()
-    # export_datpack_sample()
+    # example.export_datpack_example(os.path.join(OUTPUT_DIR, 'table_tablepack.dat'))
     # export_item_txt()
     # export_battle_txt()
-    # export_battle_txt_in_exe()
+    # export_txt_in_exe()
+    # reimport_txt_in_exe()
     # export_battle_comb_txt()
+
+    # with open('output_tablepack/4.dat', 'rb') as f:
+    #     data = gamefile_util.compress(f.read())
+
+    # with open('output_tablepack_debug/debug_item', 'rb') as f:
+    #     raw_size = int.from_bytes(f.read(4), 'little')
+    #     code_size = int.from_bytes(f.read(4), 'little')
+    #     data = gamefile_util.decompress_new(f.read(), code_size, raw_size, False)
+    #     with open('output_tablepack_debug/debug_item_decrpyted', 'wb') as fd:
+    #         fd.write(data)
 
 if __name__ == '__main__':
     main()

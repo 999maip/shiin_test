@@ -42,11 +42,11 @@ def exg_reimport_example2():
         print('file %s replace succeeded!' % file[:-4])
 
 # table_tablepack script processing example
-def export_datpack_example():
-    fin = open(GAME_RESOURCE_DIR + '/table_tablepack.dat', 'rb')
-    data = fin.read()
-    fin.close()
-    scripts = gamefile_util.datpack_to_scripts(data)
-    for script_id, data in scripts.items():
-        with open('output_tablepack/%d.dat' % script_id, 'wb') as fout:
+def export_datpack_example(filepath):
+    with open(filepath, 'rb') as f:
+        data = f.read()
+
+    scripts = gamefile_util.datpack_to_decrypted_file_list(data)
+    for script_id, data in enumerate(scripts):
+        with open('output_tablepack_debug/%d.dat' % script_id, 'wb') as fout:
             fout.write(data)

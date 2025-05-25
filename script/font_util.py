@@ -260,20 +260,26 @@ def gen_cn_glyphs():
     # ftable.close()
     return glyph_table
 
-def txt_to_mapped_txt(text):
+def load_char_mapping() -> dict:
     mapping = dict()
-    ftable = open(RESOURCE_DIR + '/char_mapping.txt', 'r', encoding='utf8')
-    mapping[' '] = ' '
-    mapping['　'] = '　'
-    for line in ftable:
-        line = line.strip()
-        if len(line) == 0:
-            continue
-        if line[0] == ' ' or line[0] == '　':
-            continue
-        cn_char = line[0]
-        jp_char = line[2]
-        mapping[cn_char] = jp_char
+    with open(os.path.join(RESOURCE_DIR, 'char_mapping.txt'), 'r', encoding='utf8') as ftable:
+        mapping['\n'] = '\n'
+        mapping[' '] = ' '
+        mapping['　'] = '　'
+        for line in ftable:
+            line = line.strip()
+            if len(line) == 0:
+                continue
+            if line[0] == ' ' or line[0] == '　':
+                continue
+            cn_char = line[0]
+            jp_char = line[2]
+            mapping[cn_char] = jp_char
+    return mapping
+
+def txt_to_mapped_txt(text, mapping=None):
+    if mapping is None:
+        mapping = load_char_mapping()
     
     out_text = ''
     for i in range(len(text)):

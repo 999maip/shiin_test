@@ -13,6 +13,6 @@ RESOURCE_DIR = 'resource'
 # csv format translation files
 CSV_FILE_LIST = ['chapter1_cn.csv', 'chapter2_cn.csv', 'chapter3_cn.csv',
                  'chapter4_cn.csv', 'chapter5_cn.csv', 'chapter6_cn.csv',
-                 'chapter1_extra.csv']
+                 'chapter1_extra.csv', 'item_cn.csv', 'exe_cn.csv']
 
 PATCH_DIR = 'patch'

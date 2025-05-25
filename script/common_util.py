@@ -11,8 +11,8 @@ def split_uid(uid: str):
             uid = uid[:-1]
         prefix, script_id, line_id = uid.split('_')
         script_id = int(script_id, 16) + SCRIPT_ID_BASE
-    except Exception:
+    except Exception as e:
         print(uid)
-        raise Exception()
+        raise e
 
     return prefix, script_id, int(line_id, 16)

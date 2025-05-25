@@ -44,6 +44,26 @@ def export_txts_to_csvfile(txts: dict, csvfile):
     for uid, txt in txts.items():
         writer.writerow(['', txt, '', '', '', uid, '', ''])
 
+def load_csv_file(filepath) -> list[list[str]]:
+    with open(filepath, 'r', encoding='utf8') as file:
+        csv_reader = csv.reader(file)
+        data_list = list(csv_reader)[1:]
+        return data_list
+
+
+def exe_csv_to_cn_txts(csv_data:list[str]):
+    cn_txts = dict()
+    csv_data_str = '' . join(csv_data)
+    csv_data_file_like = io.StringIO(csv_data_str)
+    csv_reader = csv.reader(csv_data_file_like)
+    line_number = 1
+    for row in csv_reader:
+        cn_txts[common_util.uid('exe', common_util.SCRIPT_ID_BASE, line_number)] = row[2]
+        line_number = line_number + 1
+    
+    return cn_txts
+
+
 def csvs_to_cn_txts(csv_data: list[str]):
     cn_txts = dict()
     csv_data_str = '' . join(csv_data)
