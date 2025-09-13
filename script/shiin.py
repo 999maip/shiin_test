@@ -132,7 +132,7 @@ def reimport_maze_script():
 
 def reimport_main_script():
     csv_data = []
-    for csv_file in CSV_FILE_LIST:
+    for csv_file in MAIN_CSV_FILE_LIST:
         try:
             fin = open(TEXT_DIR + '/' + csv_file, 'r', encoding='utf8')
             print(TEXT_DIR + '/' + csv_file)
