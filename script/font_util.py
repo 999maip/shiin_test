@@ -1,8 +1,17 @@
 from PIL import Image, ImageFont, ImageDraw
 import os
 import csv
-
 from config import *
+
+# About the font file format:
+# 0x00: 4 bytes, magic number EXF1
+# 4 bytes, font size info. 1 byte: size, 1 byte: size, 1 byte: advance 1 byte: x offset?
+# 2 bytes, unknown
+# 2 bytes, max glyph unicode index 0xFC4B=64587 0~64587 64588 glyphs
+# 2 bytes, zero padding
+# 0x10 ~ 0x3f140: 4 bytes * glyph number (64587 + 1 = 64588)
+# 0x3f140 ~ : glyph table. (6 bytes glyph meta info + glyph bitmap) for each glyph
+# 6 bytes glyph meta: 2-byte bimap size, 1-byte wdith, 1-byte height, 1-byte xoffset, 1-byte yoffset
 
 class Glyph:
     glyph = bytearray()
@@ -54,18 +63,19 @@ def exp_to_glyph(data, char_sjis):
 
     return glyph_obj
 
-def reimport_font_data(jp_font_data):
-    glyph_table = gen_cn_glyphs()
+def reimport_font_data(jp_font_data, font_size, advance):
+    glyph_table = gen_cn_glyphs(font_size)
     cn_font_data = bytearray()
-    cn_font_data.extend(jp_font_data[:0x3f1CA])
+    cn_font_data.extend(jp_font_data[:0x3f140])
     char_table_size = int.from_bytes(jp_font_data[10:12], 'little') + 1
-    cn_font_data[0x06] = 0x1e
+    cn_font_data[0x06] = advance
 
-    # 0x3f140-0x3f1CA(0x3f140 + 0x8A) is space glyph?
-    glyph_offset = 0x8A
+    # 0x3f140-0x3f1CA(0x3f140 + 0x8A) is the first visible glyph '!'(0x21) for fontdata1(main text font)
+    # 0x3f140-0x3f191(0x3f140 + 0x51) is the first visible glyph '!'(0x21) for fontdata1(main text font)
+    glyph_offset = 0x00
     for i in range (char_table_size):
-
-        if int.from_bytes(cn_font_data[0x10+i*4:0x10+(i+1)*4], 'little') == 0:
+        # the glyph offset is 0 for a non-exist glyph, and the very first visible glyph '!'(0x21)
+        if i != 0x21 and int.from_bytes(cn_font_data[0x10+i*4:0x10+(i+1)*4], 'little') == 0:
             continue
         try:
             char = chr(i)
@@ -86,52 +96,18 @@ def reimport_font_data(jp_font_data):
     
     return cn_font_data
 
-# used for test only
-def glyph_to_img(glyph_obj: Glyph):
-    maxv = 0
-    # a 60*60 canvas
-    print(glyph_obj.height, glyph_obj.width)
-    img = Image.new("RGB", (60, 60))
-    for i in range(glyph_obj.height):
-        for j in range(glyph_obj.width):
-            gray_scale = glyph_obj.glyph[i*glyph_obj.width + j]
-            if gray_scale > maxv:
-                maxv = gray_scale
-            img.putpixel((j+glyph_obj.offsetx, i+glyph_obj.offsety), (gray_scale, gray_scale, gray_scale))
-    
-    print(maxv)
-    return img
-
-def font_test():
-    img = Image.new("RGB", (500, 70))
-    draw = ImageDraw.Draw(img)
-
-    # use a truetype font
-    font = ImageFont.truetype(RESOURCE_DIR + '/arshanghaisonggbpro_lt.otf', 35)
-    bitmap = font.getmask('，')
-    bitmap_image = Image.frombytes(bitmap.mode, bitmap.size, bytes(bitmap))
-
-
-    # draw.text((10, 25), "文字测试文字测试", font=font)
-    draw.text((0, 0), "，", font=font)
-    bbox = draw.textbbox((0, 0), "，", font=font)
-    draw.rectangle(bbox, outline="red")
-    img.save('output_font/test_glpyh_huiwen.png')
-
 def gen_char_table(csv_file_list):
     table = dict()
 
-    fdefault = open(RESOURCE_DIR + '/default_char_table.txt', encoding='utf8')
-    for line in fdefault:
-        line = line.strip()
-        for ch in line:
-            table[ch] = 1
-
-    fdefault.close()
+    with open(os.path.join(RESOURCE_DIR, 'default_char_table.txt'), encoding='utf8') as fdefault:
+        for line in fdefault:
+            line = line.strip()
+            for ch in line:
+                table[ch] = 1
 
     for csv_file in csv_file_list:
         try:
-            with open(TEXT_DIR + '/' + csv_file, encoding='utf8') as fscript:
+            with open(os.path.join(TEXT_DIR, csv_file), encoding='utf8') as fscript:
                 csv_reader = csv.reader(fscript)
                 for row in csv_reader:
                     line = row[2] # cn
@@ -151,7 +127,6 @@ def gen_char_table(csv_file_list):
 
     for ch in table:
         fout.write(ch)
-
     fout.close()
 
 def gen_char_mapping():
@@ -199,9 +174,9 @@ def gen_char_mapping():
         # already mapped
         if v == 2:
             continue
-        for jp_char, v in jp_char_table.items():
+        for jp_char, vj in jp_char_table.items():
             # used
-            if v == 2:
+            if vj == 2:
                 continue
             mapping[cn_char] = jp_char
             jp_char_table[jp_char] = 2
@@ -216,9 +191,9 @@ def gen_char_mapping():
         fmapping.write('\n')
     fmapping.close()
 
-def gen_cn_glyphs():
-    font = ImageFont.truetype(RESOURCE_DIR + '/LXGWNeoZhiSong.ttf', 40)
-    # font = ImageFont.truetype("resource/SourceHanSansSC-Bold.otf", 40)
+def gen_cn_glyphs(font_size: int):
+    font_file_path = os.path.join(RESOURCE_DIR, 'LXGWNeoZhiSong.ttf')
+    font = ImageFont.truetype(font_file_path, font_size)
     glyph_table = dict()
     ftable = open(RESOURCE_DIR + '/char_mapping.txt', 'r', encoding='utf8')
 
@@ -228,25 +203,29 @@ def gen_cn_glyphs():
             continue
         cn_char = line[0]
         jp_char = line[2]
-        # if cn_char != '，' and cn_char != '我':
         bitmap = font.getmask(cn_char)
 
         bbox = font.getbbox(cn_char)
         glyph_obj = Glyph()
 
-        # somehow the grayscale value of the original bitmap
-        # is relatively smaller compared to a common font file,
-        # we try to adjust the grayscales of our glyph bitmap
-        # to make the font rendered normally in the game.
+        # the game's font glyph is a 4-bit grayscale bitmap
+        # and all it's 16 grayscale values are encoded to a 1-byte number.
+        gray_scale_mapping = [0x00, 0x86, 0x8d, 0x94, 0x9a, 0xa1, 0xa8, 0xae,
+                              0xb5, 0xbc, 0xc2, 0xc9, 0xd0, 0xd6, 0xdd, 0xe4]
         ba_bitmap = bytearray(bytes(bitmap))
         for i in range(len(ba_bitmap)):
-            ba_bitmap[i] = int(ba_bitmap[i] / max(1, 1.12 - 1 * (1 - ba_bitmap[i] / 255)))
+            ba_bitmap[i] = gray_scale_mapping[int(ba_bitmap[i] / 16)]
 
         glyph_obj.glyph = ba_bitmap
         glyph_obj.width = bitmap.size[0]
         glyph_obj.height = bitmap.size[1]
         glyph_obj.offsetx = max(bbox[0], 0)
         glyph_obj.offsety = bbox[1]
+
+        if cn_char == '“':
+            glyph_obj.offsetx = 20
+        elif cn_char == '‘':
+            glyph_obj.offsetx = 30
 
         glyph_table[jp_char] = glyph_obj
         # print(glyph_obj.height, glyph_obj.width)
@@ -286,29 +265,6 @@ def txt_to_mapped_txt(text, mapping=None):
         out_text = out_text + mapping[text[i]]
     
     return out_text
-
-# this function is left for reference and test.
-# use shiin.gen_cn_font() instead.
-def gen_cn_font():
-    # generate a character table for needed characters
-    print('start generating character table using translation files...')
-    gen_char_table(CSV_FILE_LIST)
-    print('generating character table finished')
-
-    # map characters into valid shift-jis encodings
-    print('start generating character mapping...')
-    gen_char_mapping()
-    print('generating character mapping finished')
-    
-    print('start generating cn font file...')
-    fin = open(GAME_RESOURCE_DIR + '/fontdata_fontdata01.exp', 'rb')
-    jp_font_data = fin.read()
-    cn_font_data = reimport_font_data(jp_font_data)
-    with open(OUTPUT_DIR + '/fontdata_fontdata01_cn.exp', 'wb') as fout:
-        fout.write(cn_font_data)
-    print('generating cn font file finished.')
-    print('All jobs done!')
-    
 
 def main():
     gen_char_table(CSV_FILE_LIST)
@@ -351,3 +307,36 @@ if __name__ == '__main__':
     # img = glyph_to_img(glyph_obj)
     # img.save('test_glpyh2.png')
     # fin.close()
+
+# debug functions
+# used for debug only
+def glyph_to_img(glyph_obj: Glyph):
+    maxv = 0
+    # a 60*60 canvas
+    print(glyph_obj.height, glyph_obj.width)
+    img = Image.new("RGB", (60, 60))
+    for i in range(glyph_obj.height):
+        for j in range(glyph_obj.width):
+            gray_scale = glyph_obj.glyph[i*glyph_obj.width + j]
+            if gray_scale > maxv:
+                maxv = gray_scale
+            img.putpixel((j+glyph_obj.offsetx, i+glyph_obj.offsety), (gray_scale, gray_scale, gray_scale))
+    
+    print(maxv)
+    return img
+
+def font_test():
+    img = Image.new("RGB", (500, 70))
+    draw = ImageDraw.Draw(img)
+
+    # use a truetype font
+    font = ImageFont.truetype(RESOURCE_DIR + '/arshanghaisonggbpro_lt.otf', 35)
+    bitmap = font.getmask('，')
+    bitmap_image = Image.frombytes(bitmap.mode, bitmap.size, bytes(bitmap))
+
+
+    # draw.text((10, 25), "文字测试文字测试", font=font)
+    draw.text((0, 0), "，", font=font)
+    bbox = draw.textbbox((0, 0), "，", font=font)
+    draw.rectangle(bbox, outline="red")
+    img.save('output_font/test_glpyh_huiwen.png')

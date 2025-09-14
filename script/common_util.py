@@ -1,9 +1,12 @@
+from typing import Tuple
+
+
 SCRIPT_ID_BASE = 0x1000000
 
 def uid(prefix, script_id, line_id):
     return prefix + '_' + format(script_id - SCRIPT_ID_BASE, '05x') + '_' + format(line_id, '08x')
 
-def split_uid(uid: str):
+def split_uid(uid: str) -> Tuple[str,int,int]:
     try:
         if uid[0] == '"':
             uid = uid[1:]

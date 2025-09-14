@@ -69,15 +69,20 @@ def csvs_to_cn_txts(csv_data: list[str]):
     csv_data_str = '' . join(csv_data)
     csv_data_file_like = io.StringIO(csv_data_str)
     csv_reader = csv.reader(csv_data_file_like)
-    for row in csv_reader:
-        line_cn_txt = row[2]
-        global_line_id = row[5]
-        if not global_line_id or global_line_id == '':
-            continue
-        prefix, script_id, line_id = common_util.split_uid(global_line_id)
-        if script_id not in cn_txts:
-            cn_txts[script_id] = dict()
-        cn_txts[script_id][line_id] = line_cn_txt
+    for line_no, row in enumerate(csv_reader):
+        try:
+            line_cn_txt = row[2]
+            global_line_id = row[5]
+            if not global_line_id or global_line_id == '':
+                continue
+            prefix, script_id, line_id = common_util.split_uid(global_line_id)
+            if script_id not in cn_txts:
+                cn_txts[script_id] = dict()
+            cn_txts[script_id][line_id] = line_cn_txt
+        except Exception:
+            print(f'Invalid data in line {line_no + 1}:  {row}')
+            exit(0)
+
     return cn_txts
 
 def main():
