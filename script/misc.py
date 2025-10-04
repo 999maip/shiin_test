@@ -7,6 +7,7 @@ import common_util
 import argparse
 import sys
 from config import *
+import os
 
 def debug_output_raw_script_dat():
     # with open(GAME_RESOURCE_DIR + '/' + 'event_script.dat', 'rb') as fin:
@@ -19,7 +20,18 @@ def debug_output_raw_script_dat():
         fout.write(scripts[script_id])
         fout.close()
 
-debug_output_raw_script_dat()
+def debug_output_main_script_dat():
+    with open(os.path.join(OUTPUT_DIR, 'event_script_cn.dat'), 'rb') as fin:
+        data = fin.read()
+
+    scripts = gamefile_util.dat_to_scripts(data)
+    for script_id, script_data in scripts.items():
+        fout = open(os.path.join(OUTPUT_DIR, 'scripts_cn_raw', f'{script_id}.dat'), 'wb')
+        fout.write(scripts[script_id])
+        fout.close()
+
+
+debug_output_main_script_dat()
 
 # the following code snippets are only left for reference.
 def old_debug_codes():
@@ -74,4 +86,4 @@ def old_debug_codes():
     #         fout.write(uid + ',' + txt + '\n')
     #     fout.close()
 
-old_debug_codes()
+# old_debug_codes()

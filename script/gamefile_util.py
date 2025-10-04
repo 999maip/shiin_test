@@ -203,9 +203,14 @@ def dat_to_scripts(data):
         script_size_raw = int.from_bytes(data[offset+8:offset+12], 'little', signed=True)
         script_code_size = int.from_bytes(data[offset+12:offset+16], 'little', signed=True)
 
-        if script_size_raw != 0:
-            scripts[script_id] = decompress(script_data, script_code_size, script_size_raw, False)
-        offset += 8 + script_size_compressed
+        try:
+            if script_size_raw != 0:
+                scripts[script_id] = decompress(script_data, script_code_size, script_size_raw, False)
+            offset += 8 + script_size_compressed
+        except:
+            print(f'decompress failed for script id {script_id}')
+            offset += 8 + script_size_compressed
+            continue
 
     return scripts
 

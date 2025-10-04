@@ -23,13 +23,14 @@ def reimport_dat_with_cn_txts(jp_dat, cn_txts: dict):
         if script_id not in cn_txts:
             cn_script = jp_script
         else:
-            cn_script = reimport_script_with_cn_txts(jp_script, cn_txts[script_id], char_mapping)
+            cn_script = reimport_script_with_cn_txts(script_id, jp_script, cn_txts[script_id], char_mapping)
         cn_scripts[script_id] = cn_script
     return gamefile_util.scripts_to_dat(cn_scripts)
 
 # reimport localized texts to script data
 # NOTE: Do not call this function directly. Call reimport_dat_with_cn_txts() instead.
-def reimport_script_with_cn_txts(jp_script, cn_txts: dict, char_mapping) -> bytearray:
+# param[in] jp_script the japanese script file binary data
+def reimport_script_with_cn_txts(script_id: int, jp_script, cn_txts: dict, char_mapping) -> bytearray:
     cn_script = bytearray()
     offset = 0
     while offset < len(jp_script):
@@ -142,7 +143,11 @@ def reimport_main_script():
             with open(os.path.join(TEXT_DIR, csv_file), 'r', encoding='utf8') as fin:
                 # ignore header
                 fin.readline()
-                csv_data.extend(fin.readlines())
+                lines = fin.readlines()
+                # we add an extra line separator if the last line doesn't end with one
+                if not lines[-1].endswith(os.linesep):
+                    lines[-1] = lines[-1] + os.linesep
+                csv_data.extend(lines)
         except Exception:
             print('Warning: file %s not exists.' % csv_file)
             continue
@@ -215,17 +220,21 @@ def export_map_txt():
                 offset = offset + inner_offset + 1
         csv_util.export_txts_to_csvfile(txts, output_csv)
 
+
 # reimports the item data
-def reimport_item_txt():
+# param[in] write_to_file: if true, the updated tablepack will be written to a new file.
+#                          Otherwise the updated tablepack will be reutrned
+def reimport_item_txt(write_to_file: bool=True, header_data=None, table_tablepack=None):
     # each item is represented by two lines,
     # the first for the name, and the second for the description.
     item_list_cn = csv_util.load_csv_file(os.path.join(TEXT_DIR, 'item_cn.csv'))
     ITEM_FILE_INDEX = 4
 
-    with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.dat'), 'rb') as f_table_tablepack:
-        table_tablepack = f_table_tablepack.read()
-    with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.hed'), 'rb') as f_header:
-        header_data = bytearray(f_header.read())
+    if table_tablepack is None:
+        with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.dat'), 'rb') as f_table_tablepack:
+            table_tablepack = f_table_tablepack.read()
+        with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.hed'), 'rb') as f_header:
+            header_data = bytearray(f_header.read())
     item_data = gamefile_util.datpack_to_decrypted_file_list(table_tablepack)[ITEM_FILE_INDEX]
 
     char_mapping = font_util.load_char_mapping()
@@ -254,6 +263,186 @@ def reimport_item_txt():
     
     header_data, table_tablepack = gamefile_util.reimport_datpack(header_data, table_tablepack, [(ITEM_FILE_INDEX, item_data)])
 
+    if write_to_file:
+        output_path_content = os.path.join(OUTPUT_DIR, 'table_tablepack_cn.dat')
+        with open(output_path_content, 'wb') as f_table_tablepack:
+            f_table_tablepack.write(table_tablepack)
+
+        output_path_header = os.path.join(OUTPUT_DIR, 'table_tablepack_cn.hed')
+        with open(output_path_header, 'wb') as f_header:
+            f_header.write(header_data)
+        print(f'Reimporting item txt completed. The main script file is generated at {output_path_content} and {output_path_header}.')
+    else:
+        return header_data, table_tablepack
+
+# reimports the location data
+# param[in] write_to_file: if true, the updated tablepack will be written to a new file.
+#                          Otherwise the updated tablepack will be reutrned
+def reimport_location_txt(write_to_file: bool=True, header_data=None, table_tablepack=None):
+    # each line a location name.
+    loc_list_cn = csv_util.load_csv_file(os.path.join(TEXT_DIR, 'loc_cn.csv'))
+    LOC_FILE_INDEX = 6
+
+    if table_tablepack is None:
+        with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.dat'), 'rb') as f_table_tablepack:
+            table_tablepack = f_table_tablepack.read()
+        with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.hed'), 'rb') as f_header:
+            header_data = bytearray(f_header.read())
+
+    loc_data = gamefile_util.datpack_to_decrypted_file_list(table_tablepack)[LOC_FILE_INDEX]
+
+    char_mapping = font_util.load_char_mapping()
+    offset = 0x26
+    loc_list_idx = 0
+    # location entry layout: size: 0x26, 0xA~: name
+    while offset < len(loc_data):
+        mapped_loc_name = font_util.txt_to_mapped_txt(loc_list_cn[loc_list_idx][2], char_mapping).encode('shift-jis')
+        if len(mapped_loc_name) == 0:
+            mapped_loc_name = loc_list_cn[loc_list_idx][1].encode('shift-jis')
+        loc_data[offset+0xA:offset+0xA+len(mapped_loc_name)] = mapped_loc_name
+        loc_data[offset+0xA+len(mapped_loc_name):offset+0x26] = b'\x00' * (offset+0x26 - (offset+0xA+len(mapped_loc_name)))
+        loc_list_idx += 1
+        offset = offset + 0x26
+    
+    header_data, table_tablepack = gamefile_util.reimport_datpack(header_data, table_tablepack, [(LOC_FILE_INDEX, loc_data)])
+
+    if write_to_file:
+        output_path_content = os.path.join(OUTPUT_DIR, 'table_tablepack_cn.dat')
+        with open(output_path_content, 'wb') as f_table_tablepack:
+            f_table_tablepack.write(table_tablepack)
+
+        output_path_header = os.path.join(OUTPUT_DIR, 'table_tablepack_cn.hed')
+        with open(output_path_header, 'wb') as f_header:
+            f_header.write(header_data)
+        print(f'Reimporting location txt completed. The main script file is generated at {output_path_content} and {output_path_header}.')
+    else:
+        return header_data, table_tablepack
+
+# reimport the boss data
+# param[in] write_to_file: if true, the updated tablepack will be written to a new file.
+#                          Otherwise the updated tablepack will be reutrned
+def reimport_boss_txt(write_to_file: bool=True, header_data=None, table_tablepack=None):
+    # each boss is represented by two lines,
+    # the first for the name1, and the second for name2.
+    boss_list_cn = csv_util.load_csv_file(os.path.join(TEXT_DIR, 'boss_cn.csv'))
+    BOSS_FILE_INDEX = 3
+
+    if table_tablepack is None:
+        with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.dat'), 'rb') as f_table_tablepack:
+            table_tablepack = f_table_tablepack.read()
+        with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.hed'), 'rb') as f_header:
+            header_data = bytearray(f_header.read())
+
+    boss_data = gamefile_util.datpack_to_decrypted_file_list(table_tablepack)[BOSS_FILE_INDEX]
+
+    char_mapping = font_util.load_char_mapping()
+    offset = 0x0
+    boss_list_idx = 0
+    # location entry layout: size: 0x68, 0x32~: name1 0x4D~ name2
+    while offset < len(boss_data) and boss_list_idx < len(boss_list_cn):
+        mapped_boss_name1 = font_util.txt_to_mapped_txt(boss_list_cn[boss_list_idx][2], char_mapping).encode('shift-jis')
+        if len(mapped_boss_name1) == 0:
+            mapped_boss_name1 = boss_list_cn[boss_list_idx][1].encode('shift-jis')
+        boss_data[offset+0x32:offset+0x32+len(mapped_boss_name1)] = mapped_boss_name1
+        boss_data[offset+0x32+len(mapped_boss_name1):offset+0x4D] = b'\x00' * (offset+0x4D - (offset+0x32+len(mapped_boss_name1)))
+        boss_list_idx += 1
+
+        mapped_boss_name2 = font_util.txt_to_mapped_txt(boss_list_cn[boss_list_idx][2], char_mapping).encode('shift-jis')
+        if len(mapped_boss_name2) == 0:
+            mapped_boss_name2 = boss_list_cn[boss_list_idx][1].encode('shift-jis')
+        boss_data[offset+0x4D:offset+0x4D+len(mapped_boss_name1)] = mapped_boss_name1
+        boss_data[offset+0x4D+len(mapped_boss_name1):offset+0x68] = b'\x00' * (offset+0x68 - (offset+0x4D+len(mapped_boss_name2)))
+        boss_list_idx += 1
+
+        offset = offset + 0x68
+    
+    header_data, table_tablepack = gamefile_util.reimport_datpack(header_data, table_tablepack, [(BOSS_FILE_INDEX, boss_data)])
+
+    if write_to_file:
+        output_path_content = os.path.join(OUTPUT_DIR, 'table_tablepack_cn.dat')
+        with open(output_path_content, 'wb') as f_table_tablepack:
+            f_table_tablepack.write(table_tablepack)
+
+        output_path_header = os.path.join(OUTPUT_DIR, 'table_tablepack_cn.hed')
+        with open(output_path_header, 'wb') as f_header:
+            f_header.write(header_data)
+        print(f'Reimporting location txt completed. The main script file is generated at {output_path_content} and {output_path_header}.')
+    else:
+        return header_data, table_tablepack
+
+# reimports the character data
+# param[in] write_to_file: if true, the updated tablepack will be written to a new file.
+#                          Otherwise the updated tablepack will be reutrned
+def reimport_character_txt(write_to_file: bool=True, header_data=None, table_tablepack=None):
+    # each character is represented by three lines,
+    # each line a name.
+    char_list_cn = csv_util.load_csv_file(os.path.join(TEXT_DIR, 'char_cn.csv'))
+    CHAR_FILE_INDEX = 8
+
+    if table_tablepack is None:
+        with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.dat'), 'rb') as f_table_tablepack:
+            table_tablepack = f_table_tablepack.read()
+        with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.hed'), 'rb') as f_header:
+            header_data = bytearray(f_header.read())
+
+    char_data = gamefile_util.datpack_to_decrypted_file_list(table_tablepack)[CHAR_FILE_INDEX]
+
+    char_mapping = font_util.load_char_mapping()
+    offset = 0x50
+    char_list_idx = 0
+    # character entry layout: size: 0x50, 0x2C~: name1, 0x38~: name2, 0x44~: name3
+    while offset < len(char_data):
+        mapped_char_name1 = font_util.txt_to_mapped_txt(char_list_cn[char_list_idx][2], char_mapping).encode('shift-jis')
+        if len(mapped_char_name1) == 0:
+            mapped_char_name1 = char_list_cn[char_list_idx][1].encode('shift-jis')
+        char_data[offset+0x2C:offset+0x2C+len(mapped_char_name1)] = mapped_char_name1
+        char_data[offset+0x2C+len(mapped_char_name1):offset+0x38] = b'\x00' * (offset+0x38 - (offset+0x2C+len(mapped_char_name1)))
+
+        char_list_idx += 1
+        mapped_char_name2 = font_util.txt_to_mapped_txt(char_list_cn[char_list_idx][2], char_mapping).encode('shift-jis')
+        if len(mapped_char_name2) == 0:
+            mapped_char_name2 = char_list_cn[char_list_idx][1].encode('shift-jis')
+        char_data[offset+0x38:offset+0x38+len(mapped_char_name2)] = mapped_char_name2
+        char_data[offset+0x38+len(mapped_char_name2):offset+0x44] = b'\x00' * (offset+0x44 - (offset+0x38+len(mapped_char_name2)))
+
+        char_list_idx += 1
+        mapped_char_name3 = font_util.txt_to_mapped_txt(char_list_cn[char_list_idx][2], char_mapping).encode('shift-jis')
+        if len(mapped_char_name3) == 0:
+            mapped_char_name3 = char_list_cn[char_list_idx][1].encode('shift-jis')
+        char_data[offset+0x44:offset+0x44+len(mapped_char_name3)] = mapped_char_name3
+        char_data[offset+0x44+len(mapped_char_name3):offset+0x50] = b'\x00' * (offset+0x50 - (offset+0x44+len(mapped_char_name3)))
+
+        offset = offset + 0x50
+        char_list_idx += 1
+    
+    # debug code
+    # with open(os.path.join(OUTPUT_DIR, '4.dat'), 'wb') as f_item:
+    #     f_item.write(char_data)
+    # debug code end
+    
+    header_data, table_tablepack = gamefile_util.reimport_datpack(header_data, table_tablepack, [(CHAR_FILE_INDEX, char_data)])
+
+    if write_to_file:
+        output_path_content = os.path.join(OUTPUT_DIR, 'table_tablepack_cn.dat')
+        with open(output_path_content, 'wb') as f_table_tablepack:
+            f_table_tablepack.write(table_tablepack)
+
+        output_path_header = os.path.join(OUTPUT_DIR, 'table_tablepack_cn.hed')
+        with open(output_path_header, 'wb') as f_header:
+            f_header.write(header_data)
+        print(f'Reimporting char txt completed. The main script file is generated at {output_path_content} and {output_path_header}.')
+    else:
+        return header_data, table_tablepack
+
+# reimport the tablepack data
+def reimport_table_txt():
+    header_data, table_tablepack = reimport_character_txt(False)
+    header_data, table_tablepack = reimport_location_txt(False, header_data, table_tablepack)
+    header_data, table_tablepack = reimport_boss_txt(False, header_data, table_tablepack)
+    header_data, table_tablepack = reimport_item_txt(False, header_data, table_tablepack)
+    header_data, table_tablepack = reimport_battle_txt(False, header_data, table_tablepack)
+    header_data, table_tablepack = reimport_battle_comb_txt(False, header_data, table_tablepack)
+
     output_path_content = os.path.join(OUTPUT_DIR, 'table_tablepack_cn.dat')
     with open(output_path_content, 'wb') as f_table_tablepack:
         f_table_tablepack.write(table_tablepack)
@@ -262,44 +451,40 @@ def reimport_item_txt():
     with open(output_path_header, 'wb') as f_header:
         f_header.write(header_data)
 
-    print(f'Reimporting item txt completed. The main script file is generated at {output_path_content} and {output_path_header}.')
+    print(f'Reimporting tablepack completed. The main script file is generated at {output_path_content} and {output_path_header}.')
 
 # reimports the map data
 def reimport_map_txt():
-    # each item is represented by two lines,
-    # the first for the name, and the second for the description.
     map_list_cn = csv_util.load_csv_file(os.path.join(TEXT_DIR, 'map_cn.csv'))
-    MAP_FILE_INDEX = 1
 
     with open(os.path.join(GAME_RESOURCE_DIR, 'map_mapdatpack.dat'), 'rb') as f_map_mapdatpack:
         map_mapdatpack = f_map_mapdatpack.read()
     with open(os.path.join(GAME_RESOURCE_DIR, 'map_mapdatpack.hed'), 'rb') as f_header:
         header_data = bytearray(f_header.read())
-    map_data = gamefile_util.datpack_to_decrypted_file_list(map_mapdatpack)[MAP_FILE_INDEX]
 
     char_mapping = font_util.load_char_mapping()
-    offset = 0xAAA0
-    map_list_idx = 0
-    # clear the original data first
-    map_data[offset:] = b'\x00' * (len(map_data) - offset)
-    while offset < len(map_data) and map_list_idx < len(map_list_cn):
-        prefix, script_id, line_id = common_util.split_uid(map_list_cn[map_list_idx][5])
-        script_id = script_id - common_util.SCRIPT_ID_BASE
-        if script_id == MAP_FILE_INDEX:
-            mapped_map_txt = font_util.txt_to_mapped_txt(map_list_cn[map_list_idx][2], char_mapping).encode('shift-jis')
-            if len(mapped_map_txt) == 0:
-                mapped_map_txt = map_list_cn[map_list_idx][1].encode('shift-jis')
-            map_data[offset:offset+len(mapped_map_txt)] = mapped_map_txt
-            offset = offset + len(mapped_map_txt) + 1
-        map_list_idx += 1
-    
-    # debug code
-    with open(os.path.join(OUTPUT_DIR, '0.dat'), 'wb') as f_map:
-        f_map.write(map_data)
-    # debug code end
-    
-    header_data, map_mapdatpack = gamefile_util.reimport_datpack(header_data, map_mapdatpack, [(MAP_FILE_INDEX, map_data)])
+    reimport_list = []
+    for file_index in range(16):
+        map_data = gamefile_util.datpack_to_decrypted_file_list(map_mapdatpack)[file_index]
 
+        offset = 0xAAA0
+        map_list_idx = 0
+        # clear the original data first
+        map_data[offset:] = b'\x00' * (len(map_data) - offset)
+        while offset < len(map_data) and map_list_idx < len(map_list_cn):
+            prefix, script_id, line_id = common_util.split_uid(map_list_cn[map_list_idx][5])
+            script_id = script_id - common_util.SCRIPT_ID_BASE
+            if script_id == file_index:
+                mapped_map_txt = font_util.txt_to_mapped_txt(map_list_cn[map_list_idx][2], char_mapping).encode('shift-jis')
+                if len(mapped_map_txt) == 0:
+                    mapped_map_txt = map_list_cn[map_list_idx][1].encode('shift-jis')
+                map_data[offset:offset+len(mapped_map_txt)] = mapped_map_txt
+                offset = offset + len(mapped_map_txt) + 1
+            map_list_idx += 1
+        reimport_list.append((file_index, map_data))
+
+    header_data, map_mapdatpack = gamefile_util.reimport_datpack(header_data, map_mapdatpack, reimport_list)
+    
     output_path_content = os.path.join(OUTPUT_DIR, 'map_mapdatpack_cn.dat')
     with open(output_path_content, 'wb') as f_map_mapdatpack:
         f_map_mapdatpack.write(map_mapdatpack)
@@ -310,13 +495,114 @@ def reimport_map_txt():
 
     print(f'Reimporting map txt completed. The main script file is generated at {output_path_content} and {output_path_header}.')
 
+# reimports the battle data
+# param[in] write_to_file: if true, the updated tablepack will be written to a new file.
+#                          Otherwise the updated tablepack will be reutrned
+def reimport_battle_txt(write_to_file: bool=True, header_data=None, table_tablepack=None):
+    battle_list_cn = csv_util.load_csv_file(os.path.join(TEXT_DIR, 'battle_cn.csv'))
+    BATTLE_FILE_INDEX = 11
+
+    if table_tablepack is None:
+        with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.dat'), 'rb') as f_table_tablepack:
+            table_tablepack = f_table_tablepack.read()
+        with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.hed'), 'rb') as f_header:
+            header_data = bytearray(f_header.read())
+
+    battle_data = gamefile_util.datpack_to_decrypted_file_list(table_tablepack)[BATTLE_FILE_INDEX]
+
+    char_mapping = font_util.load_char_mapping()
+    offset = 0
+    battle_list_idx = 0
+    # battle action block layout:
+    # total size: 0x64
+    # 0x00-0x03: unknown
+    # 0x04-0x07: action id
+    # 0x08-0x0b: unknown
+    # 0x0c: action name
+    # 0x24: action description
+    while offset < len(battle_data):
+        mapped_action_name = font_util.txt_to_mapped_txt(battle_list_cn[battle_list_idx][2], char_mapping).encode('shift-jis')
+        if len(mapped_action_name) == 0:
+            mapped_action_name = battle_list_cn[battle_list_idx][1].encode('shift-jis')
+        battle_data[offset+0xC:offset+0xC+len(mapped_action_name)] = mapped_action_name
+        battle_data[offset+0xC+len(mapped_action_name):offset+0x24] = b'\x00' * (offset+0x24 - (offset+0xC+len(mapped_action_name)))
+        battle_list_idx += 1
+
+        mapped_action_desc = font_util.txt_to_mapped_txt(battle_list_cn[battle_list_idx][2], char_mapping).encode('shift-jis')
+        if len(mapped_action_desc) == 0:
+            mapped_action_desc = battle_list_cn[battle_list_idx][1].encode('shift-jis')
+        battle_data[offset+0x24:offset+0x24+len(mapped_action_desc)] = mapped_action_desc
+        battle_data[offset+0x24+len(mapped_action_desc):offset+0x64] = b'\x00' * (offset+0x64 - (offset+0x24+len(mapped_action_desc)))
+        battle_list_idx += 1
+        offset = offset + 0x64
+    
+    header_data, table_tablepack = gamefile_util.reimport_datpack(header_data, table_tablepack, [(BATTLE_FILE_INDEX, battle_data)])
+
+    if write_to_file:
+        output_path_content = os.path.join(OUTPUT_DIR, 'table_tablepack_cn.dat')
+        with open(output_path_content, 'wb') as f_table_tablepack:
+            f_table_tablepack.write(table_tablepack)
+
+        output_path_header = os.path.join(OUTPUT_DIR, 'table_tablepack_cn.hed')
+        with open(output_path_header, 'wb') as f_header:
+            f_header.write(header_data)
+        print(f'Reimporting battle txt completed. The main script file is generated at {output_path_content} and {output_path_header}.')
+    else:
+        return header_data, table_tablepack
+
+# reimports the battle-comb data
+# param[in] write_to_file: if true, the updated tablepack will be written to a new file.
+#                          Otherwise the updated tablepack will be reutrned
+def reimport_battle_comb_txt(write_to_file: bool=True, header_data=None, table_tablepack=None):
+    battle_list_cn = csv_util.load_csv_file(os.path.join(TEXT_DIR, 'battle-comb_cn.csv'))
+    BATTLE_COMB_FILE_INDEX = 12
+
+    if table_tablepack is None:
+        with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.dat'), 'rb') as f_table_tablepack:
+            table_tablepack = f_table_tablepack.read()
+        with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.hed'), 'rb') as f_header:
+            header_data = bytearray(f_header.read())
+
+    battle_data = gamefile_util.datpack_to_decrypted_file_list(table_tablepack)[BATTLE_COMB_FILE_INDEX]
+
+    char_mapping = font_util.load_char_mapping()
+    offset = 0x48
+    battle_list_idx = 0
+    # battle comb-action block layout:
+    # total size: 0x48
+    # 0x00~0x07: unknown
+    # 0x08~: action description
+    while offset < len(battle_data):
+        mapped_action_name = font_util.txt_to_mapped_txt(battle_list_cn[battle_list_idx][2], char_mapping).encode('shift-jis')
+        if len(mapped_action_name) == 0:
+            mapped_action_name = battle_list_cn[battle_list_idx][1].encode('shift-jis')
+        battle_data[offset+0x8:offset+0x8+len(mapped_action_name)] = mapped_action_name
+        battle_data[offset+0x8+len(mapped_action_name):offset+0x48] = b'\x00' * (offset+0x48 - (offset+0x8+len(mapped_action_name)))
+        battle_list_idx += 1
+
+        offset = offset + 0x48
+    
+    header_data, table_tablepack = gamefile_util.reimport_datpack(header_data, table_tablepack, [(BATTLE_COMB_FILE_INDEX, battle_data)])
+
+    if write_to_file:
+        output_path_content = os.path.join(OUTPUT_DIR, 'table_tablepack_cn.dat')
+        with open(output_path_content, 'wb') as f_table_tablepack:
+            f_table_tablepack.write(table_tablepack)
+
+        output_path_header = os.path.join(OUTPUT_DIR, 'table_tablepack_cn.hed')
+        with open(output_path_header, 'wb') as f_header:
+            f_header.write(header_data)
+        print(f'Reimporting battle-comb txt completed. The main script file is generated at {output_path_content} and {output_path_header}.')
+    else:
+        return header_data, table_tablepack
+
 def export_battle_txt():
-    with open('output_tablepack/11.dat', 'rb') as battle_file:
+    with open(os.path.join('output_tablepack', '11.dat'), 'rb') as battle_file:
         battle_data = battle_file.read()
     line_number = 1
     txts = dict()
     offset = 0
-    # battle action block data structure:
+    # battle action block layout:
     # total size: 0x64
     # 0x00-0x03: unknown
     # 0x04-0x07: action id
@@ -339,19 +625,21 @@ def export_battle_txt():
         txts[common_util.uid('battle', common_util.SCRIPT_ID_BASE, line_number)] = action_description 
         line_number = line_number + 1
         offset = offset + 0x64
-    with open(OUTPUT_DIR + '/%s.csv' % 'battle', 'w', encoding='utf8', newline='') as output_csv:
+    with open(os.path.join(OUTPUT_DIR, + 'battle.csv'), 'w', encoding='utf8', newline='') as output_csv:
         csv_util.export_txts_to_csvfile(txts, output_csv)
 
 def export_battle_comb_txt():
-    with open('output_tablepack/12.dat', 'rb') as battle_file:
+    with open(os.path.join('output_tablepack', '12.dat'), 'rb') as battle_file:
         battle_data = battle_file.read()
     line_number = 1
     txts = dict()
-    offset = 0x48
-    # battle comb-action block data structure:
+    # battle comb-action block layout:
     # total size: 0x48
-    # 0x00-0x07: unknown
-    # 0x08: action description
+    # 0x00~0x07: unknown
+    # 0x08~: action description
+
+    # skip the empty first one
+    offset = 0x48
     while offset < len(battle_data):
         inner_offset = 0x08
         while offset < len(battle_data) and inner_offset < 0x48 and battle_data[offset+inner_offset] != 0x00:
@@ -360,7 +648,7 @@ def export_battle_comb_txt():
         txts[common_util.uid('battle_comb', common_util.SCRIPT_ID_BASE, line_number)] = action_name 
         line_number = line_number + 1
         offset = offset + 0x48
-    with open(OUTPUT_DIR + '/%s.csv' % 'battle_comb', 'w', encoding='utf8', newline='') as output_csv:
+    with open(os.path.join(OUTPUT_DIR, 'battle_comb.csv'), 'w', encoding='utf8', newline='') as output_csv:
         csv_util.export_txts_to_csvfile(txts, output_csv)
 
 def export_datpack_sample_1():
@@ -408,6 +696,8 @@ def reimport_exe_txt():
     with open(os.path.join(GAME_RESOURCE_DIR, 'Death Mark.exe'), 'rb') as exe:
         exe_data = bytearray(exe.read())
 
+    char_mapping = font_util.load_char_mapping()
+
     # We need to adjust the relative positions of some text strings
     # because their translated versions are longer than the originals.
     # Since it's difficult to implement a general solution and there are only two longer strings,
@@ -431,6 +721,7 @@ def reimport_exe_txt():
     # 0x315AC4: the actual position that "716C44" points to in the executable file.
     exe_data[0x315AC4] = 0
     exe_data[0x315AC5] = 0
+
 
     line_number = 1
     jp_txts = dict()
@@ -466,7 +757,6 @@ def reimport_exe_txt():
                 % (exe_txt, cn_txts[txt_id], cn_len, len(exe_txt.encode('shift-jis')) + padding_zeroes))
             return
 
-        char_mapping = font_util.load_char_mapping()
         mapped_cn_txt = font_util.txt_to_mapped_txt(cn_txts[txt_id], char_mapping).encode('shift-jis')
         exe_data[offset:offset+len(mapped_cn_txt)] = mapped_cn_txt
 
@@ -475,6 +765,13 @@ def reimport_exe_txt():
             exe_data[cur_pos] = 0
             cur_pos += 1
         offset = offset + inner_offset
+    
+    # The string "新規作成" is placed in the English text section (binary file offset: 0x314454).
+    # We only need to replace this string manually; other texts in the English section do not need translation.
+    cn_str_new_data = '新建存档'
+    mapped_cn_new_data = font_util.txt_to_mapped_txt(cn_str_new_data, char_mapping).encode('shift-jis')
+    exe_data[0x314454:0x314454 + len(mapped_cn_new_data)] = mapped_cn_new_data
+    exe_data[0x314454 + len(mapped_cn_new_data)] = 0
     
     output_path = os.path.join(OUTPUT_DIR, 'Death Mark_cn.exe')
     with open(output_path, 'wb') as fout:
@@ -490,7 +787,7 @@ def export_exe_txt():
     offset = 0x314E04
     MSG_TABLE_END = 0x315EC4
     # exe battle text block data structure:
-    # 0-ending strings
+    # 0-terminated strings
     while offset < MSG_TABLE_END:
         if exe_data[offset] == 0x00:
             offset = offset + 1
@@ -504,6 +801,99 @@ def export_exe_txt():
         offset = offset + inner_offset
 
     with open(os.path.join(OUTPUT_DIR, 'exe_cn.csv'), 'w', encoding='utf8', newline='') as output_csv:
+        csv_util.export_txts_to_csvfile(txts, output_csv)
+
+def export_location_txt():
+    with open(os.path.join('output_tablepack', '6.dat'), 'rb') as loc_file:
+        loc_data = loc_file.read()
+    # location block layout:
+    # total size: 0x26
+    # 0xA: name 
+
+    # skip the first block which is a zero-filled block
+    line_number = 1
+    txts = dict()
+    offset = 0x26
+    while offset < len(loc_data):
+        inner_offset = 0xA
+        while offset < len(loc_data) and loc_data[offset+inner_offset] != 0x00:
+            inner_offset = inner_offset + 1
+        name1 = loc_data[offset+0xA:offset+inner_offset].decode('shift-jis')
+        txts[common_util.uid('loc', common_util.SCRIPT_ID_BASE, line_number)] = name1
+        line_number = line_number + 1
+        offset = offset + 0x26
+
+    with open(os.path.join(OUTPUT_DIR, 'loc.csv'), 'w', encoding='utf8', newline='') as output_csv:
+        csv_util.export_txts_to_csvfile(txts, output_csv)
+
+def export_boss_txt():
+    with open(os.path.join('output_tablepack', '3.dat'), 'rb') as boss_file:
+        boss_data = boss_file.read()
+    # boss block layout:
+    # total size: 0x68
+    # 0x32: name1
+    # 0x4D: name2
+
+    line_number = 1
+    txts = dict()
+    offset = 0x0
+    while offset < len(boss_data):
+        inner_offset = 0x32
+        while offset < len(boss_data) and boss_data[offset+inner_offset] != 0x00:
+            inner_offset = inner_offset + 1
+        name1 = boss_data[offset+0x32:offset+inner_offset].decode('shift-jis')
+        txts[common_util.uid('boss', common_util.SCRIPT_ID_BASE, line_number)] = name1
+        line_number = line_number + 1
+
+        inner_offset = 0x4D
+        while offset < len(boss_data) and boss_data[offset+inner_offset] != 0x00:
+            inner_offset = inner_offset + 1
+        name2 = boss_data[offset+0x4D:offset+inner_offset].decode('shift-jis')
+        txts[common_util.uid('boss', common_util.SCRIPT_ID_BASE, line_number)] = name2
+        line_number = line_number + 1
+
+        offset = offset + 0x68
+
+    with open(os.path.join(OUTPUT_DIR, 'boss.csv'), 'w', encoding='utf8', newline='') as output_csv:
+        csv_util.export_txts_to_csvfile(txts, output_csv)
+
+def export_character_txt():
+    with open(os.path.join('output_tablepack', '8.dat'), 'rb') as char_file:
+        char_data = char_file.read()
+    # character block layout:
+    # total size: 0x50
+    # 0x2c: name1 
+    # 0x38: name2
+    # 0x44: name3
+
+    # skip the first block which is a zero-filled block
+    line_number = 1
+    txts = dict()
+    offset = 0x50
+    while offset < len(char_data):
+        inner_offset = 0x2C
+        while offset < len(char_data) and char_data[offset+inner_offset] != 0x00:
+            inner_offset = inner_offset + 1
+        name1 = char_data[offset+0x2C:offset+inner_offset].decode('shift-jis')
+        txts[common_util.uid('char', common_util.SCRIPT_ID_BASE, line_number)] = name1
+        line_number = line_number + 1
+
+        inner_offset = 0x38
+        while offset < len(char_data) and char_data[offset+inner_offset] != 0x00:
+            inner_offset = inner_offset + 1
+        name2 = char_data[offset+0x38:offset+inner_offset].decode('shift-jis')
+        txts[common_util.uid('char', common_util.SCRIPT_ID_BASE, line_number)] = name2
+        line_number = line_number + 1
+
+        inner_offset = 0x44
+        while offset < len(char_data) and char_data[offset+inner_offset] != 0x00:
+            inner_offset = inner_offset + 1
+        name3 = char_data[offset+0x44:offset+inner_offset].decode('shift-jis')
+        txts[common_util.uid('char', common_util.SCRIPT_ID_BASE, line_number)] = name3
+        line_number = line_number + 1
+        offset = offset + 0x50
+
+    with open(os.path.join(OUTPUT_DIR, 'char.csv'), 'w', encoding='utf8', newline='') as output_csv:
         csv_util.export_txts_to_csvfile(txts, output_csv)
 
 def gen_cn_font():
@@ -528,7 +918,7 @@ def gen_cn_font():
     print('start generating second cn font file...')
     with open(os.path.join(GAME_RESOURCE_DIR, 'fontdata_fontdata02.exp'), 'rb') as fin:
         jp_font_data = fin.read()
-    cn_font_data = font_util.reimport_font_data(jp_font_data, 30, 0x10)
+    cn_font_data = font_util.reimport_font_data(jp_font_data, 30, 0x16)
     font_file_path = os.path.join(OUTPUT_DIR, 'fontdata_fontdata02_cn.exp')
     with open(font_file_path, 'wb') as fout:
         fout.write(cn_font_data)
@@ -542,11 +932,11 @@ def parse_args():
                                      other scripts directly \
                                      unless you understand what you are doing. Make sure you have configured the \
                                      configuration variables defined in the config.py file.')
-    parser.add_argument('--export_dat', dest='export_dat', action='store', choices=['main', 'maze', 'exe'], help='export data file to csv files.')
-    parser.add_argument('--export_pack', dest='export_pack', action='store', choices=['map', 'item'], help='export .tablepack to csv files.')
+    parser.add_argument('--export_dat', dest='export_dat', action='store', choices=['main','maze','exe'], help='export data file to csv files.')
+    parser.add_argument('--export_pack', dest='export_pack', action='store', choices=['map','item','loc','char','boss'], help='export .tablepack to csv files.')
     parser.add_argument('--export_ui', dest='export_ui', action='store_true', help='export ui.dat to dds files.')
     parser.add_argument('--gen_patch', dest='patch', action='store_true', help='generate patch files.')
-    parser.add_argument('--reimport', dest='reimport', action='store', choices=['all', 'main', 'maze', 'item', 'map', 'exe'], help='reimport localized \
+    parser.add_argument('--reimport', dest='reimport', action='store', choices=['all','main','maze','map','exe','table'], help='reimport localized \
                         files patch files. Use "all" to export all necessary .dat files.')
     parser.add_argument('--gen_font', dest='font', action='store_true', help='generate the main font \
                         file for Chinese characters.')
@@ -568,6 +958,15 @@ def parse_args():
             export_map_txt()
         elif args.export_pack == 'item':
             export_item_txt()
+        elif args.export_pack == 'char':
+            print('Start exporting character txt')
+            export_character_txt()
+        elif args.export_pack == 'loc':
+            print('Start exporting location txt')
+            export_location_txt()
+        elif args.export_pack == 'boss':
+            print('Start exporting boss txt')
+            export_boss_txt()
     if args.export_ui:
         export_ui_dds()
     elif args.patch:
@@ -575,31 +974,33 @@ def parse_args():
     elif args.font:
         gen_cn_font()
     elif args.reimport:
-        if args.reimport == 'all':
-            print('Start reimorting main script...')
-            reimport_main_script()
-            print('Start reimorting maze script...')
-            reimport_maze_script()
-            print('Start reimorting item txt...')
-            reimport_item_txt()
-            print('Start reimorting map txt...')
-            reimport_map_txt()
-            print('Everything done!')
-        elif args.reimport == 'main':
+        if args.reimport == 'main':
             print('Start reimorting main script...')
             reimport_main_script()
         elif args.reimport == 'maze':
             print('Start reimorting maze script...')
             reimport_maze_script()
-        elif args.reimport == 'item':
-            print('Start reimorting item txt...')
-            reimport_item_txt()
-        elif args.reimport == 'map':
-            print('Start reimorting map txt...')
-            reimport_map_txt()
         elif args.reimport == 'exe':
             print('Start reimorting exe txt...')
             reimport_exe_txt()
+        elif args.reimport == 'table':
+            print('Start reimorting tablepack dat...')
+            reimport_table_txt()
+        elif args.reimport == 'map':
+            print('Start reimorting map txt...')
+            reimport_map_txt()
+        elif args.reimport == 'all':
+            print('Start reimorting main script...')
+            reimport_main_script()
+            print('Start reimorting maze script...')
+            reimport_maze_script()
+            print('Start reimorting exe txt...')
+            reimport_exe_txt()
+            print('Start reimorting tablepack dat...')
+            reimport_table_txt()
+            print('Start reimorting map txt...')
+            reimport_map_txt()
+            print('Everything done!')
 
 
 def main():

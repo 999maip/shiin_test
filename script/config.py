@@ -17,6 +17,6 @@ MAIN_CSV_FILE_LIST = ['chapter1_cn.csv', 'chapter2_cn.csv', 'chapter3_cn.csv',
                  'chapter4_cn.csv', 'chapter5_cn.csv', 'chapter6_cn.csv',
                  'chapter1-extra_cn.csv']
 CSV_FILE_LIST = MAIN_CSV_FILE_LIST + ['item_cn.csv', 'exe_cn.csv', 'maze_cn.csv', 'battle_cn.csv',
-                                      'battle-comb_cn.csv', 'map_cn.csv']
+                                      'battle-comb_cn.csv', 'map_cn.csv', 'char_cn.csv', 'loc_cn.csv', 'boss_cn.csv']
 
 PATCH_DIR = 'patch'

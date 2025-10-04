@@ -70,6 +70,8 @@ def csvs_to_cn_txts(csv_data: list[str]):
     csv_data_file_like = io.StringIO(csv_data_str)
     csv_reader = csv.reader(csv_data_file_like)
     for line_no, row in enumerate(csv_reader):
+        if len(row) == 0:
+            continue
         try:
             line_cn_txt = row[2]
             global_line_id = row[5]
