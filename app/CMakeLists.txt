@@ -32,6 +32,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         src/ui/ErrorMessage.h
         src/ui/TitleScreenBackground.h src/ui/TitleScreenBackground.cpp
         src/ui/ShiinButton.h src/ui/ShiinButton.cpp
+        src/core/PatchInfo.h
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET shiin APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR

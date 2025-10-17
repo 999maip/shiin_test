@@ -3,8 +3,8 @@
 IDI_ICON1               ICON    "shiin.ico"
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 0,0,2,0
- PRODUCTVERSION 0,0,2,0
+ FILEVERSION 0,1,0,0
+ PRODUCTVERSION 0,1,0,0
  FILEFLAGS 0x0L
  FILEFLAGSMASK 0x3fL
  FILEOS 0x00040004L
@@ -16,13 +16,13 @@ BEGIN
         BLOCK "000004b0"
         BEGIN
             VALUE "CompanyName", ""
-            VALUE "FileDescription", "ËÀÓ¡ºº»¯²¹¶¡v0.0.2"
-            VALUE "FileVersion", "0.0.1.0"
+            VALUE "FileDescription", "ËÀÓ¡ºº»¯²¹¶¡v0.1.0"
+            VALUE "FileVersion", "0.1.0.0"
             VALUE "LegalCopyright", ""
             VALUE "InternalName", "shiin_cnlize.exe"
             VALUE "OriginalFilename", "shiin_cnlize.exe"
             VALUE "ProductName", "ËÀÓ¡ºº»¯²¹¶¡"
-            VALUE "ProductVersion", "0.0.2.0"
+            VALUE "ProductVersion", "0.1.0.0"
         END
     END
     BLOCK "VarFileInfo"

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <string>
 #include <vector>
 #include "ErrorCode.h"
+#include "PatchInfo.h"
 
 class FileMeta;
 typedef std::vector<FileMeta> FileMetas;
@@ -13,12 +13,16 @@ public:
     FileMeta();
 
     // @param[out] file_meta
-    static ErrorCode LoadFileMetas(const char* filepath, FileMetas& file_meta);
+    static ErrorCode LoadFileMetas(const QString& filepath, FileMetas& file_meta);
+    static PatchInfo LoadPatchInfo(QString filepath = DEFAULT_FILEPATH);
+    static const QString DEFAULT_FILEPATH;
+    static const QString PATCH_ROOT_DIR;
 
-    std::string filename_;
-    std::string filename_short_;
+
+    QString filename_; // the real file path (relative to game's root path)
+    QString filename_short_; // script generated path (indexed based)
 
     // 0: origin 1: cn-lized
-    std::string md5_[2];
-    long long size_[2];
+    QString md5_[2];
+    qint64 size_[2];
 };

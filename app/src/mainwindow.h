@@ -20,7 +20,6 @@ class MainWindow : public QMainWindow
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
-
 private slots:
     void on_pushButton_3_clicked();
     void on_pushButton_4_clicked();
@@ -31,5 +30,6 @@ private:
     Ui::MainWindow *ui;
     PatchMain patch_main_;
     static std::map<ErrorCode, ErrorMessage> error_message_map_;
+    QString patch_desc_;
 };
 #endif // MAINWINDOW_H

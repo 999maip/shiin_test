@@ -40,6 +40,19 @@ MainWindow::MainWindow(QWidget *parent)
     setWindowFlags(Qt::MSWindowsFixedSizeDialogHint);
     ui->setupUi(this);
 
+    PatchInfo patch_info = FileMeta::LoadPatchInfo();
+    if (!patch_info.version_number_.isEmpty())
+    {
+        setWindowTitle(QStringLiteral("死印汉化补丁") + patch_info.version_number_);
+    }
+    if (patch_info.description_.isEmpty())
+    {
+        patch_desc_ = "内部测试用。";
+    }
+    else
+    {
+        patch_desc_ = patch_info.description_;
+    }
     // initialize the buttons
     QShiinButton* btn_to_cn = findChild<QShiinButton*>("pushButton");
     if (btn_to_cn)
@@ -99,7 +112,7 @@ void MainWindow::on_pushButton_3_clicked()
     QMessageBox msgBox;
     msgBox.setIcon(QMessageBox::Icon::Information);
     msgBox.setWindowTitle("补丁说明");
-    msgBox.setText("内部测试用。");
+    msgBox.setText(patch_desc_);
     msgBox.exec();
 }
 
@@ -125,7 +138,7 @@ void MainWindow::on_pushButton_clicked()
 
     ErrorMessage error_msg = error_message_map_[ret];
     QMessageBox msgBox(error_msg.icon, error_msg.title,
-                       error_msg.message + QString(patch_main_.extra_error_message_.c_str()));
+                       error_msg.message + patch_main_.extra_error_message_);
     msgBox.exec();
     exit(0);
 }
@@ -148,6 +161,6 @@ void MainWindow::on_pushButton_2_clicked()
 
     ErrorMessage error_msg = error_message_map_[ret];
     QMessageBox msgBox(error_msg.icon, error_msg.title,
-                       error_msg.message + QString(patch_main_.extra_error_message_.c_str()));
+                       error_msg.message + QString(patch_main_.extra_error_message_));
     msgBox.exec();
 }

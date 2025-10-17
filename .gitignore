@@ -29,4 +29,7 @@ script/output_tablepack_debug
 script/game_resource/*
 !script/game_resource/README.md
 Death Mark.exe.id0
+script/files_new
+script/files_old
+script/patch_exe
 
