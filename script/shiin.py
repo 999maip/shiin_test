@@ -214,9 +214,10 @@ def export_map_txt():
                 inner_offset = 0
                 while offset < len(map_data) and map_data[offset+inner_offset] != 0x00:
                     inner_offset = inner_offset + 1
-                map_txt = map_data[offset:offset+inner_offset].decode('shift-jis')
-                txts[common_util.uid('map', common_util.SCRIPT_ID_BASE + file_index, line_number)] = map_txt
-                line_number = line_number + 1
+                if inner_offset != 0:
+                    map_txt = map_data[offset:offset+inner_offset].decode('shift-jis')
+                    txts[common_util.uid('map', common_util.SCRIPT_ID_BASE + file_index, line_number)] = map_txt
+                    line_number = line_number + 1
                 offset = offset + inner_offset + 1
         csv_util.export_txts_to_csvfile(txts, output_csv)
 
@@ -464,23 +465,33 @@ def reimport_map_txt():
 
     char_mapping = font_util.load_char_mapping()
     reimport_list = []
+    map_data_list = gamefile_util.datpack_to_decrypted_file_list(map_mapdatpack)
     for file_index in range(16):
-        map_data = gamefile_util.datpack_to_decrypted_file_list(map_mapdatpack)[file_index]
+        map_data = map_data_list[file_index]
 
         offset = 0xAAA0
         map_list_idx = 0
         # clear the original data first
         map_data[offset:] = b'\x00' * (len(map_data) - offset)
-        while offset < len(map_data) and map_list_idx < len(map_list_cn):
+        while map_list_idx < len(map_list_cn):
             prefix, script_id, line_id = common_util.split_uid(map_list_cn[map_list_idx][5])
             script_id = script_id - common_util.SCRIPT_ID_BASE
             if script_id == file_index:
                 mapped_map_txt = font_util.txt_to_mapped_txt(map_list_cn[map_list_idx][2], char_mapping).encode('shift-jis')
                 if len(mapped_map_txt) == 0:
                     mapped_map_txt = map_list_cn[map_list_idx][1].encode('shift-jis')
+                if offset+len(mapped_map_txt) >= len(map_data):
+                    extra_space_required = offset + len(mapped_map_txt) - len(map_data) + 1
+                    map_data = map_data + b'\x00' * (extra_space_required)
                 map_data[offset:offset+len(mapped_map_txt)] = mapped_map_txt
                 offset = offset + len(mapped_map_txt) + 1
             map_list_idx += 1
+        if len(map_data) % 2 == 1:
+            map_data = map_data + b'\x00' # 2-byte alignment
+        if file_index == 0:
+            with open(os.path.join(OUTPUT_DIR, 'f_test.data'), 'wb') as f_test:
+                f_test.write(map_data)
+
         reimport_list.append((file_index, map_data))
 
     header_data, map_mapdatpack = gamefile_util.reimport_datpack(header_data, map_mapdatpack, reimport_list)

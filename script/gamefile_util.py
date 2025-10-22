@@ -276,7 +276,10 @@ def compress(data):
         if match_result[1] <= 0:
             try:
                 result.append(code_table.index(data[data_cursor]))
-                result.append(code_table.index(data[data_cursor+1]))
+                if data_cursor != len(data) - 1:
+                    result.append(code_table.index(data[data_cursor+1]))
+                else:
+                    result.append(code_table.index(0))
                 data_cursor += 2
             except Exception:
                 print(data_cursor, len(data))
