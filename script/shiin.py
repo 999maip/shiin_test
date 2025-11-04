@@ -163,14 +163,32 @@ def reimport_main_script():
 
     print(f'Reimporting main script completed. The main script file is generated at {output_path}.')
 
-def replace_title_example():
-    # replace title example
-    with open('texture_test/graphic_title.exg', 'rb') as old_exg_file:
-        old_title_exg = old_exg_file.read()
-    with open('texture_test/graphic_title_cn.png', 'rb') as png_file:
-        title_png = png_file.read()
-    with open('texture_test/graphic_title_cn.exg', 'wb') as exg_file:
-        exg_file.write(gamefile_util.png_to_exg(title_png, old_title_exg))
+def reimport_exg(filename: str):
+    no_suffix = False
+    if filename.endswith('_dat') or filename.endswith('_exg'):
+        no_suffix = True
+    
+    if no_suffix:
+        arcname = filename
+        old_zipfile_name = f'{filename}.zip'
+        zipfile_name = f'{filename}_cn.zip'
+    else:
+        arcname = f'{filename}.exg'
+        old_zipfile_name = f'{filename}_exg.zip'
+        zipfile_name = f'{filename}_exg_cn.zip'
+
+    with zipfile.ZipFile(os.path.join(GAME_RESOURCE_DIR, old_zipfile_name), 'r') as old_zip:
+        for name in old_zip.namelist():
+            old_exg = old_zip.read(name)
+            break
+
+    with open(os.path.join(OUTPUT_DIR, f'{filename}_cn.png'), 'rb') as png_file:
+        png = png_file.read()
+    exg_output_path = os.path.join(OUTPUT_DIR, f'{filename}.exg')
+    with open(exg_output_path, 'wb') as exg_file:
+        exg_file.write(gamefile_util.png_to_exg(png, old_exg))
+    with zipfile.ZipFile(os.path.join(OUTPUT_DIR, zipfile_name), 'w', zipfile.ZIP_DEFLATED) as zf:
+        zf.write(exg_output_path, arcname=arcname)
 
 def export_item_txt():
     with open('output_tablepack/4.dat', 'rb') as item_file:
@@ -273,6 +291,49 @@ def reimport_item_txt(write_to_file: bool=True, header_data=None, table_tablepac
         with open(output_path_header, 'wb') as f_header:
             f_header.write(header_data)
         print(f'Reimporting item txt completed. The main script file is generated at {output_path_content} and {output_path_header}.')
+    else:
+        return header_data, table_tablepack
+
+# reimports the gallery data
+# param[in] write_to_file: if true, the updated tablepack will be written to a new file.
+#                          Otherwise the updated tablepack will be reutrned
+def reimport_gallery_txt(write_to_file: bool=True, header_data=None, table_tablepack=None):
+    # each line a location name.
+    gallery_list_cn = csv_util.load_csv_file(os.path.join(TEXT_DIR, 'gallery_cn.csv'))
+    GALLERY_FILE_INDEX = 16
+
+    if table_tablepack is None:
+        with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.dat'), 'rb') as f_table_tablepack:
+            table_tablepack = f_table_tablepack.read()
+        with open(os.path.join(GAME_RESOURCE_DIR, 'table_tablepack.hed'), 'rb') as f_header:
+            header_data = bytearray(f_header.read())
+
+    gallery_data = gamefile_util.datpack_to_decrypted_file_list(table_tablepack)[GALLERY_FILE_INDEX]
+
+    char_mapping = font_util.load_char_mapping()
+    offset = 0x46
+    gallery_list_idx = 0
+    # gallery entry layout: size: 0x46, 0x22~0x41: title
+    while offset < len(gallery_data):
+        mapped_gallery_title = font_util.txt_to_mapped_txt(gallery_list_cn[gallery_list_idx][2], char_mapping).encode('shift-jis')
+        if len(mapped_gallery_title) == 0:
+            mapped_gallery_title = gallery_list_cn[gallery_list_idx][1].encode('shift-jis')
+        gallery_data[offset+0x22:offset+0x22+len(mapped_gallery_title)] = mapped_gallery_title
+        gallery_data[offset+0x22+len(mapped_gallery_title):offset+0x42] = b'\x00' * (offset+0x42 - (offset+0x22+len(mapped_gallery_title)))
+        gallery_list_idx += 1
+        offset = offset + 0x46
+    
+    header_data, table_tablepack = gamefile_util.reimport_datpack(header_data, table_tablepack, [(GALLERY_FILE_INDEX, gallery_data)])
+
+    if write_to_file:
+        output_path_content = os.path.join(OUTPUT_DIR, 'table_tablepack_cn.dat')
+        with open(output_path_content, 'wb') as f_table_tablepack:
+            f_table_tablepack.write(table_tablepack)
+
+        output_path_header = os.path.join(OUTPUT_DIR, 'table_tablepack_cn.hed')
+        with open(output_path_header, 'wb') as f_header:
+            f_header.write(header_data)
+        print(f'Reimporting gallery txt completed. The main script file is generated at {output_path_content} and {output_path_header}.')
     else:
         return header_data, table_tablepack
 
@@ -443,6 +504,7 @@ def reimport_table_txt():
     header_data, table_tablepack = reimport_item_txt(False, header_data, table_tablepack)
     header_data, table_tablepack = reimport_battle_txt(False, header_data, table_tablepack)
     header_data, table_tablepack = reimport_battle_comb_txt(False, header_data, table_tablepack)
+    header_data, table_tablepack = reimport_gallery_txt(False, header_data, table_tablepack)
 
     output_path_content = os.path.join(OUTPUT_DIR, 'table_tablepack_cn.dat')
     with open(output_path_content, 'wb') as f_table_tablepack:
@@ -607,6 +669,32 @@ def reimport_battle_comb_txt(write_to_file: bool=True, header_data=None, table_t
     else:
         return header_data, table_tablepack
 
+def export_gallery_txt():
+    with open(os.path.join('output_tablepack', '16.dat'), 'rb') as gallery_file:
+        gallery_data = gallery_file.read()
+    line_number = 1
+    txts = dict()
+    # gallery block layout:
+    # total size: 0x46
+    # 0x00-0x01: unknown
+    # 0x02-0x11: unknown
+    # 0x12-0x21: thumbnail name
+    # 0x22-0x41: gallery title
+    # 0x41-0x46: unknown
+    offset = 0x46 # ignore first dummy one
+    
+    while offset < len(gallery_data):
+        inner_offset = 0x22
+        while offset < len(gallery_data) and inner_offset < 0x42 and gallery_data[offset+inner_offset] != 0x00:
+            inner_offset = inner_offset + 1
+        gallery_title = gallery_data[offset+0x22:offset+inner_offset].decode('shift-jis')
+        txts[common_util.uid('gallery', common_util.SCRIPT_ID_BASE, line_number)] = gallery_title
+        line_number = line_number + 1
+        offset += 0x46
+
+    with open(os.path.join(OUTPUT_DIR, 'gallery.csv'), 'w', encoding='utf8', newline='') as output_csv:
+        csv_util.export_txts_to_csvfile(txts, output_csv)
+
 def export_battle_txt():
     with open(os.path.join('output_tablepack', '11.dat'), 'rb') as battle_file:
         battle_data = battle_file.read()
@@ -684,18 +772,17 @@ def gen_patch():
     print('generating patch files finished')
 
 def export_ui_dds():
-    # These offsets(and real filenames) are actually stored in the file named 'ui.hed'.
+    # These offsets(and actual filenames) are actually stored in the file named 'ui.hed'.
     # Since the offsets can be easily recognized by the dds magic number 'DDS', we don't bother loading the ui.hed file.
     offsets = [0, 0x1FE080, 0x3FC100, 0x5F6580, 0x7f0A00, 0x9EAE80, 0xbe5300, 0x4be5380, 0x8be5400,
                0x9be5480,0xabe5500,0xafe5580,0xb3e5600,
                0xd3e5680,0xf3e5700,0xf485780,0xf4dd640,0xf51d6c0,0xf525740,0xf52d7c0, 0xf92d841]
     idx = 0
-    with open(GAME_RESOURCE_DIR + '/ui.dat', 'rb') as f_ui:
+    with open(os.path.join(GAME_RESOURCE_DIR, 'ui.dat'), 'rb') as f_ui:
         while idx + 1 < len(offsets):
             dds = f_ui.read(offsets[idx+1] - offsets[idx])
-            fout = open(OUTPUT_DIR + '/%d.dds' % idx, 'wb')
-            fout.write(dds)
-            fout.close()
+            with open(os.path.join(OUTPUT_DIR, '%d.dds') % idx, 'wb') as fout:
+                fout.write(dds)
             idx = idx + 1
 
 def reimport_exe_txt():
@@ -926,6 +1013,7 @@ def gen_cn_font():
     with open(font_file_path, 'wb') as fout:
         fout.write(cn_font_data)
 
+    print(f'generating cn font file finished. The font file is generated at {font_file_path}.')
     print('start generating second cn font file...')
     with open(os.path.join(GAME_RESOURCE_DIR, 'fontdata_fontdata02.exp'), 'rb') as fin:
         jp_font_data = fin.read()
@@ -944,13 +1032,14 @@ def parse_args():
                                      unless you understand what you are doing. Make sure you have configured the \
                                      configuration variables defined in the config.py file.')
     parser.add_argument('--export_dat', dest='export_dat', action='store', choices=['main','maze','exe'], help='export data file to csv files.')
-    parser.add_argument('--export_pack', dest='export_pack', action='store', choices=['map','item','loc','char','boss'], help='export .tablepack to csv files.')
+    parser.add_argument('--export_pack', dest='export_pack', action='store', choices=['map','item','loc','char','boss','gallery'], help='export .tablepack to csv files.')
     parser.add_argument('--export_ui', dest='export_ui', action='store_true', help='export ui.dat to dds files.')
     parser.add_argument('--gen_patch', dest='patch', action='store_true', help='generate patch files.')
     parser.add_argument('--reimport', dest='reimport', action='store', choices=['all','main','maze','map','exe','table'], help='reimport localized \
                         files patch files. Use "all" to export all necessary .dat files.')
     parser.add_argument('--gen_font', dest='font', action='store_true', help='generate the main font \
                         file for Chinese characters.')
+    parser.add_argument('--reimport_exg', dest='reimport_exg', action='store', help='reimport an exg file.')
     args = parser.parse_args()
     if len(sys.argv) == 1:
         parser.print_help()
@@ -967,6 +1056,8 @@ def parse_args():
             export_item_txt()
         elif args.export_pack == 'map':
             export_map_txt()
+        elif args.export_pack == 'gallery':
+            export_gallery_txt()
         elif args.export_pack == 'item':
             export_item_txt()
         elif args.export_pack == 'char':
@@ -984,6 +1075,9 @@ def parse_args():
         gen_patch()
     elif args.font:
         gen_cn_font()
+    elif args.reimport_exg:
+        print(f'Start reimorting exg file {args.reimport_exg}...')
+        reimport_exg(args.reimport_exg)
     elif args.reimport:
         if args.reimport == 'main':
             print('Start reimorting main script...')

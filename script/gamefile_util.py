@@ -21,6 +21,11 @@ code_table = [
 0x58, 0x9F, 0x84, 0xEC, 0x55, 0xF3, 0x33, 0x09, 0xE2, 0x8C, 0x74, 0x6A, 0xFF, 0x08, 0x30, 0x1D,
 0x78, 0x43, 0x48, 0x4F, 0x34, 0xE1, 0x95, 0xDA, 0xB9, 0x1B, 0x64, 0x8A, 0x01, 0xCB, 0x03, 0x6F]
 
+code_table_index = [0] * 256
+for index, code in enumerate(code_table):
+    code_table_index[code] = index
+
+
 # data为压缩数据,code_size为压缩后的数据处理次数,size_raw为解压后数据大小
 # optimized version
 def decompress_new(data, code_size, size_raw: int, return_bytes_read: bool):
@@ -275,11 +280,11 @@ def compress(data):
         # 若匹配字节串为0,没有匹配到,获取索引
         if match_result[1] <= 0:
             try:
-                result.append(code_table.index(data[data_cursor]))
+                result.append(code_table_index[data[data_cursor]])
                 if data_cursor != len(data) - 1:
-                    result.append(code_table.index(data[data_cursor+1]))
+                    result.append(code_table_index[data[data_cursor+1]])
                 else:
-                    result.append(code_table.index(0))
+                    result.append(code_table_index[0])
                 data_cursor += 2
             except Exception:
                 print(data_cursor, len(data))
