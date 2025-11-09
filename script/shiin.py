@@ -52,8 +52,8 @@ def reimport_script_with_cn_txts(script_id: int, jp_script, cn_txts: dict, char_
         offset = offset + 8 + jp_size
     return cn_script
 
-def export_main_script():
-    with open(GAME_RESOURCE_DIR + '/' + 'event_script.dat', 'rb') as fin:
+def export_main_script_en():
+    with open(os.path.join(GAME_RESOURCE_DIR, 'event_script_en.dat'), 'rb') as fin:
         data = fin.read()
 
     # all remaining scripts will be considered as chapter 6 contents.
@@ -83,11 +83,11 @@ def export_main_script():
                         used[script_id] = True
 
         txts = dict()
-        for script_id, script_data in scripts.items():
+        for script_id, script_data in chapter_scripts.items():
             txts = txts | gamefile_util.script_to_txts('main', script_id, script_data)
         if len(txts) == 0:
             continue
-        with open(OUTPUT_DIR + '/%s.csv' % chapter_id, 'w', encoding='utf8', newline='') as output_csv:
+        with open(os.path.join(OUTPUT_DIR, f'{chapter_id}_en.csv'), 'w', encoding='utf8', newline='') as output_csv:
             csv_util.export_txts_to_csvfile(txts, output_csv)
 
     chapter6_scripts = dict()
@@ -99,7 +99,57 @@ def export_main_script():
         txts = txts | gamefile_util.script_to_txts('main', script_id, script_data)
     if len(txts) == 0:
         return
-    with open(OUTPUT_DIR + '/chapter6.csv', 'w', encoding='utf8', newline='') as output_csv:
+    with open(os.path.join(OUTPUT_DIR, 'chapter6_en.csv'), 'w', encoding='utf8', newline='') as output_csv:
+        csv_util.export_txts_to_csvfile(txts, output_csv)
+
+def export_main_script():
+    with open(os.path.join(GAME_RESOURCE_DIR, 'event_script.dat'), 'rb') as fin:
+        data = fin.read()
+
+    # all remaining scripts will be considered as chapter 6 contents.
+    chapter_script_id_ranges = {
+        'chapter1': [[16842753], [17039361, 17039389]],
+        'chapter1_extra': [[17039561, 17039599]],
+        'chapter2': [[16842754], [17039390, 17039414], [17039662]],
+        'chapter3': [[16842755], [16973828, 16973830], [17039416, 17039439]],
+        'chapter4': [[16842756], [17039440, 17039466], [17039761]],
+        'chapter5': [[16842757], [17039467, 17039502]],
+    }
+
+    scripts = gamefile_util.dat_to_scripts(data)
+    used = dict()
+    for chapter_id, script_id_ranges in chapter_script_id_ranges.items():
+        chapter_scripts = dict()
+        for script_id_range in script_id_ranges:
+            if len(script_id_range) == 1:
+                # single script
+                chapter_scripts[script_id_range[0]] = scripts[script_id_range[0]]
+                used[script_id_range[0]] = True
+            else:
+                # script range
+                for script_id in range(script_id_range[0], script_id_range[1] + 1):
+                    if script_id in scripts:
+                        chapter_scripts[script_id] = scripts[script_id]
+                        used[script_id] = True
+
+        txts = dict()
+        for script_id, script_data in chapter_scripts.items():
+            txts = txts | gamefile_util.script_to_txts('main', script_id, script_data)
+        if len(txts) == 0:
+            continue
+        with open(os.path.join(OUTPUT_DIR, f'{chapter_id}.csv'), 'w', encoding='utf8', newline='') as output_csv:
+            csv_util.export_txts_to_csvfile(txts, output_csv)
+
+    chapter6_scripts = dict()
+    for script_id, script_data in scripts.items():
+        if script_id not in used:
+            chapter6_scripts[script_id] = script_data
+    txts = dict()
+    for script_id, script_data in chapter6_scripts.items():
+        txts = txts | gamefile_util.script_to_txts('main', script_id, script_data)
+    if len(txts) == 0:
+        return
+    with open(os.path.join(OUTPUT_DIR, 'chapter6.csv'), 'w', encoding='utf8', newline='') as output_csv:
         csv_util.export_txts_to_csvfile(txts, output_csv)
 
 def export_maze_script():
@@ -184,9 +234,14 @@ def reimport_exg(filename: str):
 
     with open(os.path.join(OUTPUT_DIR, f'{filename}_cn.png'), 'rb') as png_file:
         png = png_file.read()
+    png2 = None
+    png2_filepath = os.path.join(OUTPUT_DIR, f'{filename}_cn_2.png')
+    if os.path.exists(png2_filepath):
+        with open(png2_filepath, 'rb') as png2_file:
+            png2 = png2_file.read()
     exg_output_path = os.path.join(OUTPUT_DIR, f'{filename}.exg')
     with open(exg_output_path, 'wb') as exg_file:
-        exg_file.write(gamefile_util.png_to_exg(png, old_exg))
+        exg_file.write(gamefile_util.png_to_exg(png, png2, old_exg))
     with zipfile.ZipFile(os.path.join(OUTPUT_DIR, zipfile_name), 'w', zipfile.ZIP_DEFLATED) as zf:
         zf.write(exg_output_path, arcname=arcname)
 
@@ -870,6 +925,14 @@ def reimport_exe_txt():
     mapped_cn_new_data = font_util.txt_to_mapped_txt(cn_str_new_data, char_mapping).encode('shift-jis')
     exe_data[0x314454:0x314454 + len(mapped_cn_new_data)] = mapped_cn_new_data
     exe_data[0x314454 + len(mapped_cn_new_data)] = 0
+
+    # The string "なし" is not in this table either(binary file offset: 0x30CBA4). We replace this string manually.
+    cn_str_new_data = '无'
+    mapped_cn_new_data = font_util.txt_to_mapped_txt(cn_str_new_data, char_mapping).encode('shift-jis')
+    exe_data[0x30CBA4:0x30CBA4 + len(mapped_cn_new_data)] = mapped_cn_new_data
+    exe_data[0x30CBA4 + len(mapped_cn_new_data)] = 0
+
+    # TODO: character name character table replacement
     
     output_path = os.path.join(OUTPUT_DIR, 'Death Mark_cn.exe')
     with open(output_path, 'wb') as fout:
@@ -1112,29 +1175,9 @@ def main():
     parse_args()
 
 def debug():
-    # table_tablepack script processing sample
-    fin = open(GAME_RESOURCE_DIR + '/map_mapdatpack_en.dat', 'rb')
-    data = fin.read()
-    fin.close()
-    scripts = gamefile_util.datpack_to_decrypted_file_list(data)
-    for script_id, data in enumerate(scripts):
-        fout = open('output_mappack_en/%d.dat' % script_id, 'wb')
-        # for uid, txt in script_to_txts('tablepack', script_id, data).items():
-            #fout.write(uid + ',' + txt + '\n')
-        fout.write(data)
-        fout.close()
-    pass
-    # export_main_script()
-    # export_maze_script()
-    # example.export_datpack_example(os.path.join(OUTPUT_DIR, 'table_tablepack.dat'))
-    # export_item_txt()
-    # export_battle_txt()
-    # export_txt_in_exe()
-    # reimport_txt_in_exe()
-    # export_battle_comb_txt()
-
-    # with open('output_tablepack/4.dat', 'rb') as f:
-    #     data = gamefile_util.compress(f.read())
+    with open('graphic_comtex_comtex2.exg', 'rb') as f:
+        data = f.read()
+        gamefile_util.save_exg_to_png(data, 0, 'graphic_comtex_comtex_4.png')
 
     # with open('output_tablepack_debug/debug_item', 'rb') as f:
     #     raw_size = int.from_bytes(f.read(4), 'little')
@@ -1144,5 +1187,5 @@ def debug():
     #         fd.write(data)
 
 if __name__ == '__main__':
-    main()
     # debug()
+    main()

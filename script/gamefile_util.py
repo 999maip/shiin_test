@@ -369,12 +369,14 @@ def script_to_txts(prefix, script_id, data):
         offset = offset + 8 + size
     return txts
 
-def save_exg_to_png(exg, filename):
+def save_exg_to_png(exg, index, filename):
     offset = 0x10
     width = int.from_bytes(exg[offset:offset+2], 'little')
     height = int.from_bytes(exg[offset+2:offset+4], 'little')
+    print(width, height)
 
-    offset = 0x28
+    offset = 0x28 + (width * height * 4 + 0x20) * index
+
     img = Image.new("RGBA", (width, height), (255,255,255,255))
     for x in range(height):
         for y in range(width):
@@ -382,7 +384,7 @@ def save_exg_to_png(exg, filename):
             g = int(exg[offset+1])
             r = int(exg[offset+2])
             a = int(exg[offset+3])
-            img.putpixel((x, y), (a, r, g, b))
+            img.putpixel((y, x), (r, g, b, a))
             offset = offset + 4
     img.save(filename)
     
@@ -391,7 +393,7 @@ def save_exg_to_png(exg, filename):
     
 
 # convert png data to .exg data
-def png_to_exg(png, old_exg):
+def png_to_exg(png, png2, old_exg):
     exg = bytearray()
     exg.extend(old_exg[:0x28])
 
@@ -403,6 +405,17 @@ def png_to_exg(png, old_exg):
             exg.append(g)
             exg.append(r)
             exg.append(a)
+    if png2 is not None:
+        exg.extend(old_exg[len(exg):len(exg)+0x20])
+        png2 = Image.open(io.BytesIO(png2))
+        png2_pixel_data = list(png2.getdata())
+        for i in range(0, len(png2_pixel_data)):
+            r, g, b, a = png2_pixel_data[i]
+            exg.append(b)
+            exg.append(g)
+            exg.append(r)
+            exg.append(a)
     if len(exg) < len(old_exg):
         exg.extend(old_exg[len(exg):])
+
     return exg
