@@ -43,6 +43,7 @@ def main():
         'graphic_th_thumbnail_0540_exg_cn.zip',
         'graphic_th_thumbnail_0550_exg_cn.zip',
         'graphic_th_thumbnail_0660_exg_cn.zip',
+        'ui_cn.dat',
         'Death Mark_cn.exe',
     ]
     file_paths = [
@@ -51,7 +52,7 @@ def main():
         'resource', 'resource', 'resource', 'resource', 'resource',
         'resource', 'resource', 'resource', 'resource', 'resource',
         'resource', 'resource', 'resource', 'resource', 'resource',
-        'resource', 'resource', 'resource', '.',
+        'resource', 'resource', 'resource', 'resource', '.',
     ]
 
     for index, src in enumerate(source_files):

@@ -1,5 +1,5 @@
 location,source,target,ID,fuzzy,context,translator_comments,developer_comments
-,[item1]に [item2]をかぶせた。,将[item2]铺在了[item1]上。,,,battle_comb_00000_00000001,,
+,[item1]に [item2]をかぶせた。,我们将[item2]铺在了[item1]上。,,,battle_comb_00000_00000001,,
 ,花彦くんの体の植物が塩分を吸ってみるみる弱った。,花彦君的植物身体吸收了盐分之后很快就变得虚弱了。,,,battle_comb_00000_00000002,,
 ,花彦くんに口紅を塗り、その姿を鏡に映そうとした。,我们给花彦君涂了口红，并试图让他看镜子里的自己。,,,battle_comb_00000_00000003,,
 ,薬品をシミ男に吹きかけ、[item2]を撃った。,我们往斑痕男身上喷了药物，并拿[item2]朝它射击。,,,battle_comb_00000_00000004,,
@@ -8,7 +8,7 @@ location,source,target,ID,fuzzy,context,translator_comments,developer_comments
 ,蜂蜜を[item1]にかけ、シミ男の口へ投げた。,我们往[item1]上涂了蜂蜜，朝斑痕男的嘴里扔去。,,,battle_comb_00000_00000007,,
 ,[item1]にマッチで火をつけようとした。,我们试图用火柴给[item1]点上火。,,,battle_comb_00000_00000008,,
 ,薬品をまき、それに[item2]で火をつけた。,我们洒了药水，并用[item2]点了火。,,,battle_comb_00000_00000009,,
-,[item2]に [item1]をかぶせた。,将[item1]铺在了[item2]上。,,,battle_comb_00000_0000000a,,
+,[item2]に [item1]をかぶせた。,我们将[item1]铺在了[item2]上。,,,battle_comb_00000_0000000a,,
 ,花彦くんの体の植物が塩分を吸ってみるみる弱った。,花彦君的植物身体吸收了盐分之后很快就变得虚弱了。,,,battle_comb_00000_0000000b,,
 ,花彦くんに口紅を塗り、その姿を鏡に映そうとした。,我们给花彦君涂了口红，并试图让他看镜子里的自己。,,,battle_comb_00000_0000000c,,
 ,薬品をシミ男に吹きかけ、[item1]で殴った。,我们往斑痕男身上喷了药物，并拿[item1]砸了过去。,,,battle_comb_00000_0000000d,,
