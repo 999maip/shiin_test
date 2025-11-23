@@ -236,27 +236,32 @@ def compress_dummy(data):
         count += 1
     return result
 
-def match(window_data, lookahead_data):
+# find 2-byte based largest common prefix of data[window_beg_idx:window_end_idx] and data[lookahead_beg_idx:lookahead_end_idx]
+# Here 2-byte based means that if the result is an odd number, we return result-1
+def match(data, window_beg_idx, window_end_idx, lookahead_beg_idx, lookahead_end_idx):
+    len_window_data = window_end_idx - window_beg_idx
     index = 0
     max_length = 0
     window_cursor = 0
     lookahead_cursor = 0
-    if len(window_data) < 2 or len(lookahead_data) < 2:
+    if len_window_data < 2 or lookahead_end_idx - lookahead_beg_idx < 2:
         # 数组第一位为索引，第二为长度
         return [0, 0]
-    while window_cursor < len(window_data):
+    while window_beg_idx + window_cursor + 1 < window_end_idx:
         # print(window_data[0])
         # 判断当前先行缓存区的字节串是否与滑动窗口的字节串匹配,搜索距离最近的最大子串
-        if window_data[window_cursor: window_cursor + 2] == lookahead_data[lookahead_cursor: lookahead_cursor + 2]:
+        if data[window_beg_idx+window_cursor] == data[lookahead_beg_idx+lookahead_cursor] \
+           and data[window_beg_idx+window_cursor+1] == data[lookahead_beg_idx+lookahead_cursor+1]:
             lookahead_cursor += 2
             if lookahead_cursor >= max_length:
                 max_length = lookahead_cursor
                 index = window_cursor - max_length + 2
+            if lookahead_beg_idx + lookahead_cursor + 1 >= lookahead_end_idx:
+                lookahead_cursor = 0
         else:
             lookahead_cursor = 0
         window_cursor += 2
     return [index, max_length]
-
 
 def compress(data):
     if len(data) <= 2:
@@ -276,7 +281,7 @@ def compress(data):
             flag = 0
         # 小于窗口长度,从数据头开始匹配字节串,否则从数据窗口起点开始匹配
         start_index = 0 if data_cursor <= window else data_cursor - window
-        match_result = match(data[start_index: data_cursor], data[data_cursor: data_cursor + lookahead])
+        match_result = match(data, start_index, data_cursor, data_cursor, min(data_cursor + lookahead, len(data)))
         # 若匹配字节串为0,没有匹配到,获取索引
         if match_result[1] <= 0:
             try:

@@ -467,11 +467,16 @@ def reimport_boss_txt(write_to_file: bool=True, header_data=None, table_tablepac
         mapped_boss_name2 = font_util.txt_to_mapped_txt(boss_list_cn[boss_list_idx][2], char_mapping).encode('shift-jis')
         if len(mapped_boss_name2) == 0:
             mapped_boss_name2 = boss_list_cn[boss_list_idx][1].encode('shift-jis')
-        boss_data[offset+0x4D:offset+0x4D+len(mapped_boss_name1)] = mapped_boss_name1
-        boss_data[offset+0x4D+len(mapped_boss_name1):offset+0x68] = b'\x00' * (offset+0x68 - (offset+0x4D+len(mapped_boss_name2)))
+        boss_data[offset+0x4D:offset+0x4D+len(mapped_boss_name2)] = mapped_boss_name2
+        boss_data[offset+0x4D+len(mapped_boss_name2):offset+0x68] = b'\x00' * (offset+0x68 - (offset+0x4D+len(mapped_boss_name2)))
         boss_list_idx += 1
 
         offset = offset + 0x68
+    
+    # debug code
+    with open(os.path.join(OUTPUT_DIR, '3.dat'), 'wb') as f_item:
+        f_item.write(boss_data)
+    # debug code end
     
     header_data, table_tablepack = gamefile_util.reimport_datpack(header_data, table_tablepack, [(BOSS_FILE_INDEX, boss_data)])
 
